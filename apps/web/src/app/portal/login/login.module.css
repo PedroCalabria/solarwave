@@ -1,0 +1,100 @@
+/* "Portal login" — photo panel on the left, credentials on the right. */
+
+.screen {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+}
+
+.aside {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink-900);
+}
+
+.asideImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: solImg 1600ms var(--ease-out) both;
+}
+
+.asideScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(11, 11, 11, 0.82) 0%, rgba(11, 11, 11, 0.3) 62%);
+}
+
+.asideInner {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: var(--space-10) var(--space-12);
+}
+
+.stats {
+  display: flex;
+  gap: var(--space-10);
+  margin-top: var(--space-10);
+  border-top: 1px solid var(--line-onDark);
+  padding-top: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-10);
+  background: var(--surface-page);
+}
+
+.form {
+  width: 100%;
+  max-width: 380px;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dividerLine {
+  flex: 1;
+  height: 1px;
+  background: var(--line-hairline);
+}
+
+@media (max-width: 900px) {
+  .screen {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .aside {
+    min-height: 300px;
+  }
+
+  .asideInner {
+    gap: var(--space-10);
+    padding: var(--space-8) var(--page-gutter);
+  }
+
+  .main {
+    padding: var(--space-10) var(--page-gutter) var(--space-16);
+  }
+}

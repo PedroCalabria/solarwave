@@ -1,0 +1,124 @@
+/* "Confirmation — desktop" is a two-up split; the mobile artboard drops the
+   photo panel and stacks the same content in the phone frame. */
+
+.screen {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  background: var(--surface-page);
+}
+
+.aside {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink-900);
+}
+
+.asideImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: solImg 1600ms var(--ease-out) both;
+}
+
+.asideScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(11, 11, 11, 0.78) 0%, rgba(11, 11, 11, 0.18) 60%);
+}
+
+.asideInner {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: var(--space-10) var(--space-12);
+}
+
+.main {
+  display: flex;
+  align-items: center;
+  padding: var(--space-16) var(--space-12);
+}
+
+.mainInner {
+  max-width: 520px;
+  animation: solRise 800ms var(--ease-out) both;
+}
+
+.rows {
+  margin: var(--space-8) 0 0;
+  background: var(--surface-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: 14px 22px;
+  border-bottom: 1px solid rgba(11, 11, 11, 0.06);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.next {
+  list-style: none;
+  margin: var(--space-8) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.nextItem {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-10);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .screen {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .aside {
+    min-height: 320px;
+  }
+
+  .asideInner {
+    gap: var(--space-10);
+    padding: var(--space-8) var(--page-gutter);
+  }
+
+  .main {
+    padding: var(--space-10) var(--page-gutter) var(--space-16);
+  }
+
+  .rows {
+    border-radius: var(--radius-lg);
+  }
+
+  .row {
+    padding: 12px 16px;
+  }
+}

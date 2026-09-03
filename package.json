@@ -1,0 +1,10 @@
+{
+  "name": "solarwave",
+  "private": true,
+  "packageManager": "pnpm@9.15.2",
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "lint": "pnpm -r lint"
+  }
+}

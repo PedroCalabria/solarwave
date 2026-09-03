@@ -1,0 +1,57 @@
+/* "Lead detail" — score/data/attempts stack on the left, transcript on the right. */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  align-items: start;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.panelHead {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line-hairline);
+  font-size: var(--title-2);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--title-tracking);
+  color: var(--text-strong);
+}
+
+.fieldRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--ink-100);
+}
+
+.fieldRow:last-child {
+  border-bottom: 0;
+}
+
+.transcript {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 660px;
+  overflow-y: auto;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .transcript {
+    max-height: none;
+  }
+}
