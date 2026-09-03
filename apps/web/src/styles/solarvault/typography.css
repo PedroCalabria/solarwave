@@ -1,0 +1,27 @@
+:root{
+--font-display:"Poppins","Century Gothic",system-ui,sans-serif;
+--font-ui:"Roboto","Helvetica Neue",Arial,system-ui,sans-serif;
+--font-body:var(--font-ui);
+
+--fw-light:300;
+--fw-regular:400;
+--fw-medium:500;
+--fw-bold:700;
+--fw-black:900;
+
+--type-display-1-size:104px;--type-display-1-lh:.92;--type-display-1-weight:var(--fw-light);--type-display-1-track:-.01em;
+--type-display-2-size:64px;--type-display-2-lh:.98;--type-display-2-weight:var(--fw-light);--type-display-2-track:-.01em;
+
+--type-h1-size:40px;--type-h1-lh:1.18;--type-h1-weight:var(--fw-bold);--type-h1-track:-.01em;
+--type-h2-size:30px;--type-h2-lh:1.25;--type-h2-weight:var(--fw-bold);--type-h2-track:-.005em;
+--type-h3-size:22px;--type-h3-lh:1.3;--type-h3-weight:var(--fw-bold);--type-h3-track:0;
+--type-h4-size:17px;--type-h4-lh:1.35;--type-h4-weight:var(--fw-bold);--type-h4-track:0;
+
+--type-body-size:15px;--type-body-lh:1.6;--type-body-weight:var(--fw-regular);
+--type-body-sm-size:13px;--type-body-sm-lh:1.6;
+--type-caption-size:11px;--type-caption-lh:1.45;
+
+--type-label-size:13px;--type-label-lh:1;--type-label-weight:var(--fw-bold);
+--type-nav-size:13px;--type-nav-weight:var(--fw-regular);
+--type-eyebrow-size:11px;--type-eyebrow-track:.08em;--type-eyebrow-weight:var(--fw-bold);
+}

@@ -1,0 +1,43 @@
+/* The mobile artboard reduces the header to brand + language toggle; the link
+   row and CTA are desktop-only. Without this they force a min-width wider than
+   a phone viewport and the whole page scrolls sideways. */
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 18px var(--page-gutter);
+}
+
+.links {
+  display: flex;
+  gap: 26px;
+  flex: 1;
+}
+
+.link {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: var(--body-2);
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.langs {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .nav {
+    gap: 14px;
+    justify-content: space-between;
+  }
+
+  .links,
+  .cta {
+    display: none;
+  }
+}
