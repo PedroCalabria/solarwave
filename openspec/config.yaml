@@ -1,0 +1,203 @@
+schema: spec-driven
+
+# All OpenSpec artifacts (proposals, designs, specs, tasks) MUST be written in English.
+
+context: |
+  # SolarWave — project context and decision log
+
+  Lead qualification platform for a residential solar company. A bilingual
+  (PT/EN) landing page captures leads; an AI voice agent calls and qualifies
+  them; employees review results and configure criteria in an internal portal.
+  Functional spec: `solar-lead-qualification-spec.md` (repo root). The spec is
+  the baseline; the decisions below extend or override it where noted.
+
+  ## Purpose and scope
+  - Built for DEMONSTRATION, not for commercial sale. Free tiers and the Vercel
+    Hobby plan are acceptable. Never call real customers with real data in demos.
+  - Phase 1 is Brazil-only for phone numbers (+55). Timezone is derived from the
+    DDD (area code). Both call languages (pt default, en) remain available.
+  - The highlight of the product is the automation: scheduling, the LLM voice
+    call and the LLM-assisted qualification. Give those parts the most care.
+
+  ## Repository state (2026-09-03)
+  - pnpm monorepo. `apps/web` = Next.js 16 (App Router, React 19). All screens
+    exist and match the design: landing `/pt` `/en`, confirmation, portal login,
+    leads dashboard, lead detail, criteria, audit. Demo data in
+    `apps/web/src/lib/leads.ts`. Intake `POST /api/leads` validates, normalises
+    phone, dedups and rate-limits IN PROCESS MEMORY only.
+  - Not built yet: database, auth, CAPTCHA, scheduler, voice bridge, scoring
+    worker, transcript retention job. `packages/` is empty.
+  - Known drift between spec, demo data and UI (must be resolved by schema):
+    blocking criteria, configurable hand-off threshold (70 in UI), criterion
+    question text (UI) vs expected_value (spec), callback-requested retry,
+    intermediate state between call end and scoring, "answered but incomplete"
+    outcome.
+
+  ## Target architecture (decided)
+  Everything runs on Vercel (Hobby). No separate always-on service.
+
+    POST /api/leads -> start(leadWorkflow, [leadId])          (Vercel Workflow)
+       loop attempts (max 3):
+         sleep until next_call_at (08:00-22:00 in the lead's DDD timezone)
+         step: Twilio calls.create (Answering Machine Detection on)
+         hook: wait for "call.ended"  <- /api/twilio/status (status callback)
+                                      <- /api/media (WebSocket <-> Gemini Live)
+         step: scoring (extract -> deterministic engine -> reason/icebreaker -> judge)
+         qualified | disqualified | opt_out -> exit
+         no_answer | busy | voicemail | failed | answered_incomplete -> sleep 15m / 2d
+
+  - Scheduler = Vercel Workflow (`sleep`, `createHook`/`resumeHook`). Confirmed
+    available on Hobby: 50k events/month, 1 GB written, no sleep/run limit,
+    1-day run retention (our Postgres is the source of truth).
+  - Vercel Cron on Hobby runs at most once per day (+/-59 min). Use it ONLY for
+    daily tasks: Supabase keep-alive ping and the 12-month transcript purge.
+  - Voice bridge = Next.js route using `experimental_upgradeWebSocket` from
+    `@vercel/functions` (WebSockets in Functions are public beta, need Fluid
+    Compute, connection closes at the function max duration = 300s on Hobby).
+    Fallback if the beta bites: a small Fastify service on Fly.io for the bridge only.
+  - Twilio Media Streams sends 8 kHz mu-law; Gemini Live takes 16 kHz PCM16 in
+    and returns 24 kHz PCM16. Resample both ways in the bridge. On model
+    interruption (barge-in) send Twilio a `clear` to flush buffered audio.
+
+  ## LLM decisions
+  - Provider: Google Gemini, free tier (only provider with a free realtime voice API).
+  - Voice model: Gemini 2.5 Flash Native Audio (free for audio in/out; supports
+    async function calling NON_BLOCKING, input+output transcription, barge-in,
+    configurable VAD, pt among 97 languages). Do NOT use 3.1 Flash Live Preview
+    (charges audio input on free tier, sequential-only tools). Exact model IDs
+    are preview and must be verified at implementation time.
+  - Text models (scoring extraction, reason/icebreaker, guardrail judge,
+    question linter, simulated leads for evals): Gemini Flash (non-realtime,
+    satisfying spec section 4.6 "a different, non-realtime model").
+  - SDKs: Vercel AI SDK (`ai`) with AI Gateway "google/<model>" strings for
+    everything text/structured-output. `@google/genai` Live client ONLY for the
+    realtime call (AI SDK does not cover bidirectional realtime audio). Never
+    trust memory for AI SDK APIs; read `node_modules/ai/docs/`.
+  - Free-tier terms allow Google to use content to improve products. Fine for
+    demo; would require the paid tier before any real customer data.
+  - Transcripts come from Gemini Live input/output transcription. Call audio is
+    never stored (spec section 10).
+
+  ## Conversation design decisions
+  - The script is DRIVEN BY THE ACTIVE CRITERIA. The system prompt is assembled
+    at call time from active criteria. Fixed, non-editable frame: AI disclosure,
+    permission to ask, tone rules, all section 6 guardrails, closing. Criteria
+    fill only the middle.
+  - Each criterion carries `question_pt`, `question_en`, `type`
+    (boolean|numeric|enum|free_text), `expected_value` (rule the engine
+    evaluates), `weight`, `blocking`, `active`.
+  - Tone guardrail: questions must never insult or judge the lead. Criterion
+    type constrains phrasing; the agent never asks the lead to justify a
+    negative answer. A cheap LLM "question linter" runs when an employee saves
+    a criterion and warns about tone or guardrail conflicts (e.g. a credit
+    pre-check collides with "no financial advice / no sensitive data").
+  - Ordering: blocking criteria first, then by descending weight. A failed
+    blocking criterion ends the call politely with an alternative (e.g.
+    community-solar waitlist) instead of continuing.
+  - Call duration: target 2 minutes, stated in the prompt. Bridge injects a
+    "wrap up courteously on your next turn" instruction at 90 s and hard-stops
+    the call at 3 minutes. Portal shows a question budget and warns when active
+    criteria exceed roughly 5-6 questions.
+  - Live tools available to the agent: record_answer(criterion_key, value),
+    request_callback(preferred_time), mark_opt_out(), flag_minor(),
+    end_call(reason). Live record_answer is advisory (controls flow and
+    early exit); the post-call extraction is the source of truth.
+  - "Enough information" (spec section 4.5) = all active blocking criteria
+    answered AND at least a configurable share of active weight answered.
+    Otherwise the attempt outcome is `answered_incomplete` and counts as
+    no-answer for retry.
+  - Hostile/abusive lead -> end gracefully and set status `disqualified`
+    directly (no retry), outcome `abusive`. Minor answered -> end, outcome
+    `minor_answered`, retry per spec. Opt-out -> immediate DB write, call ends,
+    status `opt_out`, terminal; overrides everything (spec section 6). An
+    opted-out phone re-submitting the form must NOT be re-scheduled.
+
+  ## Scoring decisions
+  - Score is DETERMINISTIC and reproducible. LLM extracts structured answers
+    (value, confidence, evidence quote) using a JSON schema generated from the
+    active criteria. The engine in `packages/core` applies `expected_value`,
+    weights, blocking and the threshold. Only extraction, reason/icebreaker
+    prose and the guardrail judge are LLM calls.
+  - Hand-off threshold (currently 70) becomes a persisted, audited setting.
+  - Guardrail judge: post-call LLM pass flags section 6 violations into a
+    `guardrail_violations` table shown in the portal. Belt-and-braces check for
+    opt-out intent in the transcript as well.
+  - Re-scoring past transcripts after criteria changes must be possible.
+
+  ## Data decisions
+  - Database: Supabase Postgres provisioned through the Vercel Marketplace.
+    Drizzle ORM for schema and migrations (domain code stays vendor-neutral).
+    Supabase Auth for employee login (roles agent|admin). Supabase Realtime for
+    the live dashboard (`calling` state). Daily cron ping prevents free-tier pause.
+  - Schema = spec section 8 plus: criteria `blocking`, `question_pt`,
+    `question_en`, `expected_value` semantics per type; `settings` table
+    (threshold, min answered weight share); leads `next_call_at`,
+    `attempt_count`, `opt_out_at`, `workflow_run_id`; call_attempts
+    `twilio_call_sid`, `scoring_status`; qualification_answers
+    `normalized_value` (jsonb), `confidence`, `evidence`, `passed`;
+    `guardrail_violations` table; employees linked to Supabase Auth users.
+  - Outcome enum extended: answered_complete, answered_incomplete, no_answer,
+    voicemail, busy, failed, abusive, minor_answered, opt_out.
+  - Rate limiting/CAPTCHA: Cloudflare Turnstile + Postgres-based or Vercel
+    Firewall rate limit (no Redis needed for the demo).
+  - Phone normalisation via libphonenumber-js with +55 default.
+
+  ## Development strategy (de-risking without telephony)
+  1. Scoring worker first, tested against the demo transcripts already in
+     `apps/web/src/lib/leads.ts` (ready-made fixtures).
+  2. Conversation agent in TEXT with a second LLM playing lead personas
+     (hostile, minor, asks price, renter, opt-out, chatty). Eval suite covering
+     every section 6 guardrail and the 2-minute budget.
+  3. Browser-microphone harness against the bridge and Gemini Live.
+  4. Twilio last. Trial gives about 75 voice minutes for 30 days, only 5
+     verified numbers, sign-up country only. Budget is about 35 two-minute calls.
+
+  ## Planned changes (in order)
+  1. persistent-foundations — packages/db (Drizzle + Supabase), packages/core
+     (phone, DDD->tz, call window, retry, scoring engine, state machine, tests),
+     intake on DB with unique phone index + workflow start, portal on DB,
+     criteria CRUD + audit persisted, employee auth, threshold setting.
+  2. scoring-worker — extraction, engine wiring, reason/icebreaker, guardrail
+     judge, re-scoring, fixtures from demo transcripts.
+  3. conversation-agent-text — prompt assembly from criteria, tools schema,
+     question linter, simulated-lead eval suite.
+  4. voice-bridge — Twilio webhooks, Media Streams WS, Gemini Live, resample,
+     barge-in, transcript capture, 90 s / 3 min timers, AMD, status callbacks.
+  5. lifecycle-and-operations — leadWorkflow (sleep/hook/retry/window),
+     callback-requested handling, no_answer_final, transcript purge cron,
+     Supabase keep-alive cron, cost per call, realtime dashboard.
+
+  ## Open questions (settle inside the relevant change's design.md)
+  - Intermediate status between call end and scoring: keep `calling` until
+    scored, or add `scoring` to the lifecycle (affects the UI STATUS map).
+  - Callback-requested: honour the lead's requested time inside the window as
+    the next attempt (recommended) vs. follow the fixed 15 m / 2 d policy.
+  - Whether the Twilio trial announcement/verification limits force a paid
+    upgrade before the demo.
+
+  ## Conventions
+  - TypeScript everywhere, pnpm workspaces, Drizzle, Vitest for `packages/*`.
+  - Conventional commits (feat:, fix:, chore:, ...).
+  - Next.js 16 has breaking changes vs. training data: read
+    `apps/web/node_modules/next/dist/docs/` before writing Next code.
+  - Deterministic logic lives in `packages/core` and must be unit-tested
+    without any LLM call. LLM calls live behind small adapters so models can be
+    swapped and mocked.
+  - Docs, specs, code comments and commit messages in English. UI copy is
+    bilingual PT/EN.
+
+rules:
+  proposal:
+    - Written in English.
+    - Include a "Non-goals" section and reference the spec sections touched.
+    - State which parts of the change are deterministic and which call an LLM.
+  design:
+    - Written in English.
+    - Record any open question from the config context that this change settles, with the decision and rationale.
+    - Call out free-tier / Hobby-plan limits that constrain the design.
+  specs:
+    - Written in English. Requirements use SHALL/MUST with Given/When/Then scenarios.
+    - Every guardrail from spec section 6 that the change touches gets its own scenario.
+  tasks:
+    - Written in English. Tasks small enough to complete in about 2 hours each.
+    - Include tests for packages/core logic and eval fixtures for LLM behaviour where relevant.
