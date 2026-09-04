@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DisplayHeading, PillButton, SectionLabel } from "@/components/ds/soltera";
 import type { Copy } from "@/lib/copy";
 import type { Locale } from "@/lib/i18n";
+import type { Submission } from "@/lib/submission";
 import { useSubmission } from "@/lib/useSubmission";
 import styles from "@/app/[locale]/confirmacao/confirm.module.css";
 
@@ -15,10 +16,20 @@ const mono: CSSProperties = {
   textTransform: "uppercase",
 };
 
-export function ConfirmationView({ t, locale }: { t: Copy; locale: Locale }) {
+export function ConfirmationView({
+  t,
+  locale,
+  initial = null,
+}: {
+  t: Copy;
+  locale: Locale;
+  /** Lead loaded on the server from the `?lead=<id>` query; sessionStorage is the fallback. */
+  initial?: Submission | null;
+}) {
   const router = useRouter();
   // Null until hydration, which just means the em-dash placeholders show first.
-  const submission = useSubmission();
+  const stored = useSubmission();
+  const submission = initial ?? stored;
 
   const firstName = submission?.name?.split(" ")[0];
   const title = firstName ? `${t.confirmTitlePrefix}${firstName}` : t.confirmTitleFallback;

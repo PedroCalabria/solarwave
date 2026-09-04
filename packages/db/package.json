@@ -1,0 +1,35 @@
+{
+  "name": "@solarwave/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Drizzle schema, migrations, seed and query functions for SolarWave's Postgres (Supabase).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./test": "./src/test/harness.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "dotenv -e ../../apps/web/.env.local -- tsx src/migrate.ts",
+    "seed": "dotenv -e ../../apps/web/.env.local -- tsx src/seed/index.ts",
+    "studio": "dotenv -e ../../apps/web/.env.local -- drizzle-kit studio",
+    "test": "vitest run",
+    "test:integration": "dotenv -e ../../apps/web/.env.local -- vitest run --config vitest.integration.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solarwave/core": "workspace:*",
+    "@supabase/supabase-js": "^2.115.0",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13",
+    "typescript": "^5",
+    "vitest": "^4"
+  }
+}
