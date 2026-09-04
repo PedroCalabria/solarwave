@@ -23,6 +23,7 @@
     }
   },
   "include": [
+    "vitest.config.mts",
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",

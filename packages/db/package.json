@@ -6,7 +6,8 @@
   "description": "Drizzle schema, migrations, seed and query functions for SolarWave's Postgres (Supabase).",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema.ts",
+    "./test": "./src/test/harness.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

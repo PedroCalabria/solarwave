@@ -1,10 +1,25 @@
+import { countAudit, countLeadsByStatus, getDb, listActiveCriteria } from "@solarwave/db";
 import { PortalSidebar } from "@/components/app/PortalSidebar";
+import { requireEmployee } from "@/lib/auth";
 import styles from "../portal.module.css";
 
-export default function PortalShellLayout({ children }: { children: React.ReactNode }) {
+export const dynamic = "force-dynamic";
+
+export default async function PortalShellLayout({ children }: { children: React.ReactNode }) {
+  const employee = await requireEmployee();
+  const db = getDb();
+  const [counts, activeCriteria, auditCount] = await Promise.all([
+    countLeadsByStatus(db),
+    listActiveCriteria(db),
+    countAudit(db),
+  ]);
+
   return (
     <div className={styles.shell}>
-      <PortalSidebar />
+      <PortalSidebar
+        employee={{ name: employee.name, role: employee.role }}
+        counts={{ leads: counts.all, criteria: activeCriteria.length, audit: auditCount }}
+      />
       <div className={styles.content}>{children}</div>
     </div>
   );

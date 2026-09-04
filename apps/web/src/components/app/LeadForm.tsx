@@ -1,11 +1,14 @@
 "use client";
 
+import { Turnstile } from "@marsidev/react-turnstile";
 import { useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ds/solarvault";
 import type { Copy } from "@/lib/copy";
 import type { Locale } from "@/lib/i18n";
 import { SUBMISSION_KEY, type Submission } from "@/lib/submission";
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
 const labelStyle: CSSProperties = {
   display: "block",
@@ -38,7 +41,31 @@ const errorStyle: CSSProperties = {
   paddingLeft: 4,
 };
 
-type Errors = Partial<Record<"name" | "phone" | "email" | "form", string>>;
+const helpStyle: CSSProperties = {
+  fontSize: "var(--body-3)",
+  color: "var(--text-muted)",
+  marginTop: 6,
+  paddingLeft: 4,
+};
+
+type Errors = Partial<Record<"name" | "phone" | "email" | "captcha" | "form", string>>;
+
+type IntakeResponse = {
+  status?: "created" | "existing";
+  lead?: { id: string };
+  error?: string;
+  code?: string;
+  fieldErrors?: Partial<Record<"name" | "phone" | "email", string>>;
+};
+
+/** Brazilian numbers only in phase 1: 10 or 11 national digits, optional +55. */
+function looksBrazilian(phone: string): boolean {
+  const trimmed = phone.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (trimmed.startsWith("+")) return digits.startsWith("55") && (digits.length === 12 || digits.length === 13);
+  const national = digits.replace(/^0+/, "");
+  return national.length === 10 || national.length === 11;
+}
 
 export function LeadForm({ t, locale }: { t: Copy; locale: Locale }) {
   const router = useRouter();
@@ -46,17 +73,19 @@ export function LeadForm({ t, locale }: { t: Copy; locale: Locale }) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [callLang, setCallLang] = useState<Locale | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
 
-  /** Spec §3.2: the call language defaults to pt when the visitor does not pick one. */
+  /** Spec section 3.2: the call language defaults to pt when the visitor does not pick one. */
   const effectiveCallLang: Locale = callLang ?? "pt";
 
   const validate = (): Errors => {
     const next: Errors = {};
     if (name.trim().length < 3) next.name = t.errName;
-    if (phone.replace(/\D/g, "").length < 8) next.phone = t.errPhone;
+    if (!looksBrazilian(phone)) next.phone = t.errPhone;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = t.errEmail;
+    if (TURNSTILE_SITE_KEY && !turnstileToken) next.captcha = t.errCaptcha;
     return next;
   };
 
@@ -74,20 +103,29 @@ export function LeadForm({ t, locale }: { t: Copy; locale: Locale }) {
       phone: phone.trim(),
       email: email.trim(),
       preferredCallLanguage: effectiveCallLang,
+      turnstileToken,
     };
 
+    let leadId: string | null = null;
     try {
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
+      const body = (await res.json().catch(() => null)) as IntakeResponse | null;
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setErrors({ form: body?.error ?? "Something went wrong. Please try again." });
+        if (body?.fieldErrors) {
+          setErrors({ ...body.fieldErrors, form: body.error });
+        } else if (body?.code === "captcha_missing" || body?.code === "captcha_failed") {
+          setErrors({ captcha: t.errCaptcha });
+        } else {
+          setErrors({ form: body?.error ?? "Something went wrong. Please try again." });
+        }
         setPending(false);
         return;
       }
+      leadId = body?.lead?.id ?? null;
     } catch {
       setErrors({ form: "Network error. Please try again." });
       setPending(false);
@@ -100,8 +138,12 @@ export function LeadForm({ t, locale }: { t: Copy; locale: Locale }) {
       email: payload.email,
       callLang: effectiveCallLang,
     };
-    sessionStorage.setItem(SUBMISSION_KEY, JSON.stringify(submission));
-    router.push(`/${locale}/confirmacao`);
+    try {
+      sessionStorage.setItem(SUBMISSION_KEY, JSON.stringify(submission));
+    } catch {
+      // Private mode: the confirmation page falls back to the lead id in the URL.
+    }
+    router.push(leadId ? `/${locale}/confirmacao?lead=${leadId}` : `/${locale}/confirmacao`);
   };
 
   const langOptions: { code: Locale; label: string; note: string }[] = [
@@ -157,14 +199,18 @@ export function LeadForm({ t, locale }: { t: Copy; locale: Locale }) {
             onChange={(e) => setPhone(e.target.value)}
             placeholder={t.phPhone}
             aria-invalid={Boolean(errors.phone)}
-            aria-describedby={errors.phone ? "lead-phone-error" : undefined}
+            aria-describedby={errors.phone ? "lead-phone-error" : "lead-phone-help"}
             style={fieldStyle(Boolean(errors.phone))}
           />
           {errors.phone ? (
             <div id="lead-phone-error" style={errorStyle}>
               {errors.phone}
             </div>
-          ) : null}
+          ) : (
+            <div id="lead-phone-help" style={helpStyle}>
+              {t.phoneHelp}
+            </div>
+          )}
         </div>
       </div>
 
@@ -222,9 +268,7 @@ export function LeadForm({ t, locale }: { t: Copy; locale: Locale }) {
                 >
                   {option.label}
                 </div>
-                <div style={{ fontSize: "var(--body-3)", opacity: 0.62, marginTop: 3 }}>
-                  {option.note}
-                </div>
+                <div style={{ fontSize: "var(--body-3)", opacity: 0.62, marginTop: 3 }}>{option.note}</div>
               </button>
             );
           })}
@@ -240,6 +284,26 @@ export function LeadForm({ t, locale }: { t: Copy; locale: Locale }) {
           {t.callLangHelp}
         </div>
       </fieldset>
+
+      {TURNSTILE_SITE_KEY ? (
+        <div style={{ marginTop: "var(--space-5)" }}>
+          <Turnstile
+            siteKey={TURNSTILE_SITE_KEY}
+            options={{ language: locale === "pt" ? "pt-br" : "en", theme: "light", size: "flexible" }}
+            onSuccess={(token) => {
+              setTurnstileToken(token);
+              setErrors((prev) => ({ ...prev, captcha: undefined }));
+            }}
+            onExpire={() => setTurnstileToken(null)}
+            onError={() => setTurnstileToken(null)}
+          />
+          {errors.captcha ? (
+            <div role="alert" style={errorStyle}>
+              {errors.captcha}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {errors.form ? (
         <div

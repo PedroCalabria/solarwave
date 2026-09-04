@@ -1,46 +1,69 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import type { Kpis, StatusCounts } from "@solarwave/db";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { DisplayHeading, PillButton } from "@/components/ds/soltera";
 import {
-  LEADS,
-  KPIS,
   STATUS,
   STATUS_KEYS,
-  filterLeads,
+  formatDateTime,
+  formatPhone,
   scoreColor,
-  statusCounts,
+  type Lead,
+  type LeadStatus,
 } from "@/lib/leads";
 import styles from "@/app/portal/portal.module.css";
 
 const COLUMNS = "1.15fr 0.95fr 1.15fr 84px 1.5fr 1.6fr 138px";
 const MIN_TABLE_WIDTH = 1080;
 
-/** The prototype exposed these as a prop so reviewers could inspect each state. */
-type DataState = "data" | "loading" | "empty";
+type Props = {
+  rows: Lead[];
+  counts: StatusCounts;
+  kpis: Kpis;
+  threshold: number;
+  statusFilter: LeadStatus | "all";
+  query: string;
+};
 
-const STATE_BUTTONS: { id: DataState; label: string }[] = [
-  { id: "data", label: "With data" },
-  { id: "loading", label: "Loading" },
-  { id: "empty", label: "Empty" },
-];
+function hrefFor(status: string, query: string): string {
+  const sp = new URLSearchParams();
+  if (status !== "all") sp.set("status", status);
+  if (query) sp.set("q", query);
+  const qs = sp.toString();
+  return qs ? `/portal/leads?${qs}` : "/portal/leads";
+}
 
-export function LeadsDashboard() {
+export function LeadsDashboard({ rows, counts, kpis, threshold, statusFilter, query }: Props) {
   const router = useRouter();
-  const [dataState, setDataState] = useState<DataState>("data");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [query, setQuery] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [search, setSearch] = useState(query);
 
-  const counts = useMemo(() => statusCounts(), []);
-  const rows = useMemo(
-    () => filterLeads(LEADS, statusFilter, query),
-    [statusFilter, query],
-  );
+  // Debounced search -> URL, so the Server Component re-queries.
+  useEffect(() => {
+    if (search === query) return;
+    const handle = setTimeout(() => {
+      startTransition(() => router.replace(hrefFor(statusFilter, search.trim())));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [search, query, statusFilter, router]);
 
-  const isLoading = dataState === "loading";
-  const isEmpty = dataState === "empty" || (dataState === "data" && rows.length === 0);
-  const hasRows = dataState === "data" && rows.length > 0;
+  const qualifiedRate = kpis.total > 0 ? Math.round((100 * kpis.qualified) / kpis.total) : 0;
+  const tiles = [
+    { label: "New today", value: String(kpis.newToday), delta: `${kpis.total} total` },
+    { label: "Qualified", value: String(kpis.qualified), delta: `${qualifiedRate}% rate` },
+    {
+      label: "Awaiting retry",
+      value: String(kpis.awaitingRetry),
+      delta: kpis.nextRetryAt ? `next ${formatDateTime(kpis.nextRetryAt)}` : "no retry scheduled",
+    },
+    { label: "Median score", value: kpis.medianScore === null ? "—" : String(kpis.medianScore), delta: `hand-off at ${threshold}` },
+  ];
+
+  const isEmpty = rows.length === 0;
+  const filtered = statusFilter !== "all" || query.length > 0;
 
   return (
     <div className={styles.screen}>
@@ -48,43 +71,20 @@ export function LeadsDashboard() {
         <div>
           <DisplayHeading size="var(--display-3)">Leads</DisplayHeading>
           <p style={{ fontSize: "var(--body-2)", color: "var(--text-muted)", margin: "var(--space-2) 0 0" }}>
-            {isLoading
-              ? "Syncing with the call agent…"
-              : `${rows.length} of ${LEADS.length} leads shown · updated just now`}
+            {isPending ? "Refreshing…" : `${rows.length} of ${counts.all} leads shown`}
           </p>
-        </div>
-
-        <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" }}>
-          {STATE_BUTTONS.map((b) => {
-            const on = dataState === b.id;
-            return (
-              <button
-                key={b.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setDataState(b.id)}
-                style={{
-                  border: `1px solid ${on ? "var(--ink-900)" : "var(--line-hairline)"}`,
-                  background: on ? "var(--ink-900)" : "var(--white)",
-                  color: on ? "var(--white)" : "var(--text-muted)",
-                  borderRadius: "var(--radius-pill)",
-                  padding: "7px 13px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "var(--label-2)",
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  transition: "all var(--dur-base) var(--ease-out)",
-                }}
-              >
-                {b.label}
-              </button>
-            );
-          })}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "var(--space-3)", marginTop: "var(--space-6)" }}>
-        {KPIS.map((k) => (
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+          gap: "var(--space-3)",
+          marginTop: "var(--space-6)",
+        }}
+      >
+        {tiles.map((k) => (
           <div key={k.label} style={{ background: "var(--surface-card)", borderRadius: "var(--radius-lg)", padding: "18px 20px" }}>
             <div className={styles.mono}>{k.label}</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-2)", marginTop: "var(--space-3)", flexWrap: "wrap" }}>
@@ -113,20 +113,18 @@ export function LeadsDashboard() {
             const active = statusFilter === key;
             const style = key === "all" ? null : STATUS[key];
             return (
-              <button
+              <Link
                 key={key}
-                type="button"
+                href={hrefFor(key, query)}
                 aria-pressed={active}
-                onClick={() => setStatusFilter(key)}
                 className={styles.badge}
                 style={{
                   background: active ? "var(--ink-900)" : (style?.bg ?? "var(--white)"),
                   color: active ? "var(--white)" : (style?.fg ?? "var(--text-body)"),
-                  border: active
-                    ? "1px solid var(--ink-900)"
-                    : (style?.border ?? "1px solid var(--line-hairline)"),
+                  border: active ? "1px solid var(--ink-900)" : (style?.border ?? "1px solid var(--line-hairline)"),
                   padding: "6px 12px",
                   transition: "all var(--dur-base) var(--ease-out)",
+                  textDecoration: "none",
                 }}
               >
                 <span
@@ -139,18 +137,15 @@ export function LeadsDashboard() {
                 />
                 {key === "all" ? "All" : style?.label}
                 <span style={{ opacity: 0.55 }}>{counts[key] ?? 0}</span>
-              </button>
+              </Link>
             );
           })}
         </div>
 
         <div style={{ flex: 1, minWidth: 240, display: "flex", justifyContent: "flex-end" }}>
           <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setDataState("data");
-            }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name, phone or email…"
             aria-label="Search leads"
             style={{
@@ -169,7 +164,7 @@ export function LeadsDashboard() {
         </div>
       </div>
 
-      <div className={styles.panel} style={{ marginTop: "var(--space-4)" }}>
+      <div className={styles.panel} style={{ marginTop: "var(--space-4)", opacity: isPending ? 0.6 : 1, transition: "opacity var(--dur-base)" }}>
         <div className={styles.tableScroll}>
           <div className={styles.thead} style={{ gridTemplateColumns: COLUMNS, minWidth: MIN_TABLE_WIDTH }}>
             <span>Name</span>
@@ -180,46 +175,6 @@ export function LeadsDashboard() {
             <span>Icebreaker</span>
             <span>Status</span>
           </div>
-
-          {isLoading ? (
-            <div>
-              {[1, 2, 3, 4, 5, 6].map((n) => (
-                <div
-                  key={n}
-                  className={styles.trow}
-                  style={{ gridTemplateColumns: COLUMNS, minWidth: MIN_TABLE_WIDTH, padding: "16px 20px" }}
-                >
-                  <div
-                    style={{
-                      height: 10,
-                      borderRadius: 5,
-                      width: "78%",
-                      background:
-                        "linear-gradient(90deg, var(--ink-100) 25%, var(--ink-050) 50%, var(--ink-100) 75%)",
-                      backgroundSize: "420px 100%",
-                      animation: "solShimmer 1300ms linear infinite",
-                    }}
-                  />
-                  {["84%", "90%", "60%", "96%", "88%"].map((w, i) => (
-                    <div key={i} style={{ height: 10, borderRadius: 5, background: "var(--ink-100)", width: w }} />
-                  ))}
-                  <div style={{ height: 22, borderRadius: 999, background: "var(--ink-100)", width: 92 }} />
-                </div>
-              ))}
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "14px 20px" }}>
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: "var(--ink-400)",
-                    animation: "solPulse 1200ms var(--ease-out) infinite",
-                  }}
-                />
-                <span className={styles.mono}>Loading leads</span>
-              </div>
-            </div>
-          ) : null}
 
           {isEmpty ? (
             <div style={{ padding: "84px 30px 90px", textAlign: "center" }}>
@@ -243,7 +198,7 @@ export function LeadsDashboard() {
                   color: "var(--text-strong)",
                 }}
               >
-                {dataState === "empty" ? "No leads yet" : "No leads match these filters"}
+                {filtered ? "No leads match these filters" : "No leads yet"}
               </div>
               <p
                 style={{
@@ -255,35 +210,31 @@ export function LeadsDashboard() {
                   textWrap: "pretty",
                 }}
               >
-                {dataState === "empty"
-                  ? "As soon as someone submits the form on the site, the lead lands here and the AI agent starts calling within five minutes."
-                  : `Try a different status or clear the search — you are filtering on “${query}”.`}
+                {filtered
+                  ? `Try a different status or clear the search${query ? ` — you are filtering on “${query}”` : ""}.`
+                  : "As soon as someone submits the form on the site, the lead lands here and the AI agent starts calling within the allowed window."}
               </p>
-              <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "center", marginTop: "var(--space-6)", flexWrap: "wrap" }}>
-                <PillButton
-                  variant="ghost"
-                  size="sm"
-                  showKnob={false}
-                  onClick={() => {
-                    setStatusFilter("all");
-                    setQuery("");
-                    setDataState("data");
-                  }}
-                >
-                  Clear filters
-                </PillButton>
-                <PillButton variant="primary" size="sm" icon="refresh-cw" onClick={() => setDataState("data")}>
-                  Reload
-                </PillButton>
-              </div>
+              {filtered ? (
+                <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "center", marginTop: "var(--space-6)", flexWrap: "wrap" }}>
+                  <PillButton
+                    variant="ghost"
+                    size="sm"
+                    showKnob={false}
+                    onClick={() => {
+                      setSearch("");
+                      startTransition(() => router.replace("/portal/leads"));
+                    }}
+                  >
+                    Clear filters
+                  </PillButton>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-
-          {hasRows ? (
+          ) : (
             <div>
               {rows.map((lead) => {
                 const badge = STATUS[lead.status];
-                const colour = scoreColor(lead.score);
+                const colour = scoreColor(lead.score, threshold);
                 return (
                   <div
                     key={lead.id}
@@ -310,11 +261,11 @@ export function LeadsDashboard() {
                         {lead.name}
                       </div>
                       <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--label-2)", color: "var(--text-muted)", marginTop: 3, letterSpacing: ".06em" }}>
-                        {lead.created}
+                        {formatDateTime(lead.createdAt)}
                       </div>
                     </div>
                     <div className={styles.truncate} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--body-3)", color: "var(--text-body)" }}>
-                      {lead.phone}
+                      {formatPhone(lead.phone)}
                     </div>
                     <div className={styles.truncate} style={{ fontSize: "var(--body-3)", color: "var(--text-body)" }}>
                       {lead.email}
@@ -336,25 +287,14 @@ export function LeadsDashboard() {
                       </div>
                     </div>
                     <div className={styles.truncate} style={{ fontSize: "var(--body-3)", color: "var(--text-body)" }}>
-                      {lead.reason}
+                      {lead.qualificationReason ?? "—"}
                     </div>
                     <div className={styles.truncate} style={{ fontSize: "var(--body-3)", color: "var(--text-muted)" }}>
-                      {lead.icebreaker}
+                      {lead.icebreaker ?? "—"}
                     </div>
                     <div>
-                      <span
-                        className={styles.badge}
-                        style={{ background: badge.bg, color: badge.fg, border: badge.border }}
-                      >
-                        <span
-                          style={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: "50%",
-                            background: badge.fg,
-                            animation: badge.dot,
-                          }}
-                        />
+                      <span className={styles.badge} style={{ background: badge.bg, color: badge.fg, border: badge.border }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: badge.fg, animation: badge.dot }} />
                         {badge.label}
                       </span>
                     </div>
@@ -362,11 +302,11 @@ export function LeadsDashboard() {
                 );
               })}
               <div className={styles.tfoot}>
-                <span>{`Showing ${rows.length} of ${LEADS.length} leads`}</span>
-                <span>Auto-refresh 30s</span>
+                <span>{`Showing ${rows.length} of ${counts.all} leads`}</span>
+                <span>Reload to refresh</span>
               </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

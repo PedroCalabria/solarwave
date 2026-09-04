@@ -1,23 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { AUDIT, CRITERIA, LEADS } from "@/lib/leads";
+import { usePathname } from "next/navigation";
+import { signOutAction } from "@/app/portal/login/actions";
 import styles from "@/app/portal/portal.module.css";
 
-const NAV = [
-  { href: "/portal/leads", label: "Leads", count: String(LEADS.length) },
-  {
-    href: "/portal/criteria",
-    label: "Criteria",
-    count: String(CRITERIA.filter((c) => c.active).length),
-  },
-  { href: "/portal/audit", label: "Audit history", count: String(AUDIT.length) },
-];
+type Props = {
+  employee: { name: string; role: "agent" | "admin" };
+  counts: { leads: number; criteria: number; audit: number };
+};
 
-export function PortalSidebar() {
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+export function PortalSidebar({ employee, counts }: Props) {
   const pathname = usePathname();
-  const router = useRouter();
+
+  const nav = [
+    { href: "/portal/leads", label: "Leads", count: String(counts.leads) },
+    { href: "/portal/criteria", label: "Criteria", count: String(counts.criteria) },
+    { href: "/portal/audit", label: "Audit history", count: String(counts.audit) },
+  ];
 
   return (
     <div className={styles.sidebar}>
@@ -49,7 +58,7 @@ export function PortalSidebar() {
         </div>
 
         <nav className={styles.navList}>
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
@@ -88,31 +97,38 @@ export function PortalSidebar() {
             flex: "0 0 auto",
           }}
         >
-          LP
+          {initials(employee.name)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "var(--body-2)", fontWeight: 500, color: "var(--text-strong)" }}>
-            Lucas Prado
+          <div
+            className={styles.truncate}
+            style={{ fontSize: "var(--body-2)", fontWeight: 500, color: "var(--text-strong)" }}
+          >
+            {employee.name}
           </div>
-          <div style={{ fontSize: "var(--body-3)", color: "var(--text-muted)" }}>Sales ops</div>
+          <div style={{ fontSize: "var(--body-3)", color: "var(--text-muted)", textTransform: "capitalize" }}>
+            {employee.role}
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => router.push("/portal/login")}
-          style={{
-            border: "1px solid var(--line-hairline)",
-            background: "transparent",
-            borderRadius: "var(--radius-pill)",
-            padding: "5px 11px",
-            fontFamily: "var(--font-mono)",
-            fontSize: "var(--label-2)",
-            letterSpacing: ".1em",
-            textTransform: "uppercase",
-            color: "var(--text-muted)",
-          }}
-        >
-          Exit
-        </button>
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            style={{
+              border: "1px solid var(--line-hairline)",
+              background: "transparent",
+              borderRadius: "var(--radius-pill)",
+              padding: "5px 11px",
+              fontFamily: "var(--font-mono)",
+              fontSize: "var(--label-2)",
+              letterSpacing: ".1em",
+              textTransform: "uppercase",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+            }}
+          >
+            Exit
+          </button>
+        </form>
       </div>
     </div>
   );

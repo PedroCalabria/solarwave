@@ -62,6 +62,8 @@ export type Copy = {
   errName: string;
   errPhone: string;
   errEmail: string;
+  errCaptcha: string;
+  phoneHelp: string;
   confirmEyebrow: string;
   confirmTitlePrefix: string;
   confirmTitleFallback: string;
@@ -192,8 +194,10 @@ export const COPY: Record<Locale, Copy> = {
       "Ao enviar, você autoriza o contato telefônico automatizado e o tratamento dos seus dados conforme a LGPD. Você pode pedir a remoção do seu número na própria ligação.",
     privacy: "Privacidade",
     errName: "Informe seu nome completo.",
-    errPhone: "Informe um telefone válido com DDD.",
+    errPhone: "Informe um telefone brasileiro válido, com DDD.",
     errEmail: "Informe um e-mail válido.",
+    errCaptcha: "Confirme que você não é um robô para continuar.",
+    phoneHelp: "Por enquanto atendemos apenas números do Brasil (+55).",
     confirmEyebrow: "Formulário recebido",
     confirmTitlePrefix: "Recebemos seus dados, ",
     confirmTitleFallback: "Recebemos seus dados",
@@ -324,7 +328,7 @@ export const COPY: Record<Locale, Copy> = {
     labelPhone: "Phone number",
     labelEmail: "Email",
     phName: "James Whitfield",
-    phPhone: "(512) 555-0148",
+    phPhone: "+55 11 98842-1170",
     phEmail: "james@email.com",
     labelCallLang: "Preferred language for the call",
     callLangHelp: "The AI agent runs the whole conversation in this language.",
@@ -337,8 +341,10 @@ export const COPY: Record<Locale, Copy> = {
       "By submitting you agree to be contacted by an automated call and to your data being processed under GDPR/LGPD. You can ask to be removed during the call itself.",
     privacy: "Privacy",
     errName: "Please enter your full name.",
-    errPhone: "Please enter a valid phone number.",
+    errPhone: "Please enter a valid Brazilian phone number, including the area code.",
     errEmail: "Please enter a valid email.",
+    errCaptcha: "Please confirm you are not a robot to continue.",
+    phoneHelp: "We currently call Brazilian numbers (+55) only.",
     confirmEyebrow: "Form received",
     confirmTitlePrefix: "We have your details, ",
     confirmTitleFallback: "We have your details",
