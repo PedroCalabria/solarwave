@@ -58,12 +58,22 @@ The Vercel Marketplace Supabase integration injects `POSTGRES_URL` /
 
 ### Supabase
 
+Supabase is not in the Vercel Marketplace CLI catalog, so provision it directly:
+
+1. Create a free project at <https://supabase.com/dashboard> (region São Paulo).
+2. In *Project Settings → API* copy the project URL, the anon (or publishable)
+   key and the service-role key.
+3. In *Connect* copy the **Transaction pooler** string (port 6543) into
+   `DATABASE_URL` and the **Direct connection** string (port 5432) into
+   `DATABASE_URL_UNPOOLED`.
+4. Put them in `apps/web/.env.local`, then:
+
 ```bash
-vercel link
-vercel integration add supabase
-vercel env pull apps/web/.env.local
 pnpm db:migrate && pnpm db:seed
 ```
+
+For deploys, add the same variables to the Vercel project (`vercel env add`
+or the dashboard).
 
 The seed creates two Supabase Auth users (`lucas.prado@soltera.com` as admin,
 `aline.ribeiro@soltera.com` as agent) with the password in

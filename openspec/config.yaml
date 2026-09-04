@@ -125,7 +125,10 @@ context: |
   - Re-scoring past transcripts after criteria changes must be possible.
 
   ## Data decisions
-  - Database: Supabase Postgres provisioned through the Vercel Marketplace.
+  - Database: Supabase Postgres. Supabase is NOT in the Vercel Marketplace CLI
+    catalog (`vercel integration add supabase` fails, verified 2026-09-04), so
+    the project is created at supabase.com and its keys are pasted into
+    `apps/web/.env.local` and the Vercel project env vars by hand.
     Drizzle ORM for schema and migrations (domain code stays vendor-neutral).
     Supabase Auth for employee login (roles agent|admin). Supabase Realtime for
     the live dashboard (`calling` state). Daily cron ping prevents free-tier pause.

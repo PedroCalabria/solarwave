@@ -84,7 +84,7 @@ Pages are Server Components calling `packages/db` query functions directly; no i
 
 ## Migration Plan
 
-1. `vercel integration add supabase`, then `vercel env pull .env.local`.
+1. Create the Supabase project at supabase.com (Supabase is not in the Vercel Marketplace CLI catalog; `vercel integration add supabase` returns "No integration found"). Copy the project URL, anon/publishable key, service-role key and the two connection strings (transaction pooler on 6543, direct on 5432) into `apps/web/.env.local`, and later into the Vercel project with `vercel env add`.
 2. `pnpm --filter @solarwave/db migrate` (Drizzle migrations) and `pnpm --filter @solarwave/db seed`.
 3. Create Turnstile site; set keys in Vercel and `.env.local`.
 4. Deploy. The old in-memory intake and demo constants are deleted in the same release; rollback is `git revert` plus redeploy, the database can stay in place.
