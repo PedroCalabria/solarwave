@@ -1,9 +1,9 @@
 import { dddToTimezone, evaluateAnswer, scoreLead, type ScoringAnswer, type ScoringCriterion } from "@solarwave/core";
 import { createClient } from "@supabase/supabase-js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createStandaloneDb, type Db } from "../client";
+import { createStandaloneDb, type Db, type Tx } from "../client";
 import { directDatabaseUrl } from "../env";
 import {
   callAttempts,
@@ -26,52 +26,109 @@ function addMonths(date: Date, months: number): Date {
 }
 
 /**
- * Creates (or finds) the Supabase Auth users for the demo employees. Skipped
- * with a warning when the Supabase env vars are absent (plain Postgres).
- * Returns the auth user id per seed employee id.
+ * Creates (or finds) the Supabase Auth users for the demo employees WITHOUT the
+ * service-role key: sign-up goes through the public endpoint with the
+ * publishable/anon key, and the e-mail is confirmed with a SQL update over the
+ * database connection we already hold. Returns the auth user id per seed
+ * employee id; empty on plain Postgres, where nobody can sign in anyway.
  */
-async function ensureAuthUsers(): Promise<Map<string, string>> {
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+async function ensureAuthUsers(db: Db): Promise<Map<string, string>> {
   const ids = new Map<string, string>();
-  if (!url || !serviceKey) {
-    console.warn("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set: seeding employees without Auth users (they cannot sign in).");
+  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.SUPABASE_ANON_KEY;
+
+  const hasAuthSchema = await db
+    .execute(sql`select 1 from information_schema.tables where table_schema = 'auth' and table_name = 'users'`)
+    .then((rows) => (rows as unknown as unknown[]).length > 0)
+    .catch(() => false);
+
+  if (!hasAuthSchema) {
+    console.warn("No Supabase Auth schema on this database: seeding employees without sign-in accounts.");
     return ids;
   }
 
-  const supabase = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const wanted = EMPLOYEES.filter((e) => e.auth);
   const password = process.env.SEED_EMPLOYEE_PASSWORD ?? "solarwave-demo-2026";
 
-  const { data: existing, error: listError } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-  if (listError) throw listError;
-
-  for (const emp of EMPLOYEES.filter((e) => e.auth)) {
-    const found = existing.users.find((u) => u.email?.toLowerCase() === emp.email);
-    if (found) {
-      ids.set(emp.id, found.id);
-      continue;
+  if (url && publishableKey) {
+    const supabase = createClient(url, publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
+    for (const emp of wanted) {
+      // Idempotent: an existing e-mail either errors or returns an obfuscated
+      // user; the SQL lookup below is the source of truth either way.
+      const { error } = await supabase.auth.signUp({
+        email: emp.email,
+        password,
+        options: { data: { name: emp.name } },
+      });
+      if (error && !/already|registered|exists/i.test(error.message)) {
+        console.warn(`Sign-up for ${emp.email} failed: ${error.message}`);
+      }
     }
-    const { data, error } = await supabase.auth.admin.createUser({
-      email: emp.email,
-      password,
-      email_confirm: true,
-      user_metadata: { name: emp.name },
-    });
-    if (error) throw error;
-    ids.set(emp.id, data.user.id);
-    console.log(`Created auth user ${emp.email} (password: ${password})`);
+  } else {
+    console.warn("NEXT_PUBLIC_SUPABASE_URL / key not set: not creating sign-in accounts, only linking existing ones.");
+  }
+
+  // Confirm the demo accounts so they can sign in with a password, then read
+  // back their ids. Both statements run as the project owner over Postgres.
+  for (const emp of wanted) {
+    await db.execute(
+      sql`update auth.users set email_confirmed_at = now()
+          where lower(email) = ${emp.email} and email_confirmed_at is null`,
+    );
+    const rows = (await db.execute(
+      sql`select id::text as id from auth.users where lower(email) = ${emp.email} limit 1`,
+    )) as unknown as Array<{ id: string }>;
+    const id = rows[0]?.id;
+    if (id) ids.set(emp.id, id);
+    else console.warn(`No auth user for ${emp.email}: create it in the Supabase dashboard and re-run the seed.`);
   }
   return ids;
 }
 
+/**
+ * An employee seeded before its auth user existed carries a fixture id. Move it
+ * onto the real auth user id, re-pointing every reference, so re-running the
+ * seed after creating the accounts converges instead of hitting the unique
+ * e-mail index.
+ */
+async function relinkEmployee(tx: Tx, fromId: string, toId: string): Promise<void> {
+  if (fromId === toId) return;
+  const existing = await tx.select({ id: employees.id }).from(employees).where(eq(employees.id, fromId)).limit(1);
+  if (existing.length === 0) return;
+
+  await tx.insert(employees).select(
+    tx
+      .select({
+        id: sql<string>`${toId}::uuid`.as("id"),
+        name: employees.name,
+        email: employees.email,
+        role: employees.role,
+        active: employees.active,
+        createdAt: employees.createdAt,
+        updatedAt: employees.updatedAt,
+      })
+      .from(employees)
+      .where(eq(employees.id, fromId)),
+  );
+  await tx.update(qualificationCriteria).set({ updatedBy: toId }).where(eq(qualificationCriteria.updatedBy, fromId));
+  await tx.update(criteriaAuditLog).set({ changedBy: toId }).where(eq(criteriaAuditLog.changedBy, fromId));
+  await tx.update(settings).set({ updatedBy: toId }).where(eq(settings.updatedBy, fromId));
+  await tx.delete(employees).where(eq(employees.id, fromId));
+  console.log(`Re-linked employee ${fromId} to auth user ${toId}.`);
+}
+
 export async function seed(db: Db): Promise<void> {
-  const authIds = await ensureAuthUsers();
+  const authIds = await ensureAuthUsers(db);
   /** Seed employee id -> actual employees.id (auth user id when available). */
   const empId = (seedId: string) => authIds.get(seedId) ?? seedId;
 
   await db.transaction(async (tx) => {
     // Employees
     for (const emp of EMPLOYEES) {
+      await relinkEmployee(tx, emp.id, empId(emp.id));
       await tx
         .insert(employees)
         .values({ id: empId(emp.id), name: emp.name, email: emp.email, role: emp.role, active: emp.auth })

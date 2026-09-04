@@ -19,7 +19,9 @@ Constraints: demo project on the Vercel Hobby plan and Supabase free tier; TypeS
 ## Decisions
 
 ### D1. Drizzle ORM with the `postgres` (postgres-js) driver, Supabase transaction pooler
-Drizzle keeps the schema in TypeScript, generates SQL migrations we can read, and works against any Postgres, so the domain stays vendor-neutral if Supabase is swapped. Prisma was considered; it is heavier at cold start on Functions and hides SQL. The Supabase transaction pooler (port 6543) requires `prepare: false` on postgres-js. The client is created lazily through a `getDb()` function so `next build` does not crash before env vars exist; no `Proxy` wrappers (they break Auth libraries that inspect the object).
+Drizzle keeps the schema in TypeScript, generates SQL migrations we can read, and works against any Postgres, so the domain stays vendor-neutral if Supabase is swapped. Prisma was considered; it is heavier at cold start on Functions and hides SQL. The client is created lazily through a `getDb()` function so `next build` does not crash before env vars exist; no `Proxy` wrappers (they break Auth libraries that inspect the object).
+
+`DATABASE_URL` points at the Supabase **session pooler** (port 5432), not the transaction pooler (6543). Measured during implementation: postgres-js pipelines the concurrent queries a page fires from one `Promise.all` onto a single connection, and in transaction mode Supavisor routes each statement to a different server connection, so replies stop correlating and the connection stalls in `ClientRead` with an open transaction until `statement_timeout` cancels it. Six rounds of the portal's query set failed on the first round through 6543 and ran in about 220 ms each through 5432. `prepare: false` and `fetch_types: false` stay set so the same client still works if a deployment is later pointed at the transaction pooler with serialised queries. `DATABASE_URL_UNPOOLED` (direct connection) is used for migrations and the seed.
 
 ### D2. Schema: spec section 8 extended, with enums as Postgres enums
 Extensions and their reasons:

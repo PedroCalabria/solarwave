@@ -41,7 +41,7 @@
 
 ## 7. Supabase provisioning and authentication
 
-- [ ] 7.1 Provision Supabase through `vercel integration add supabase`, pull env vars, run migrations and seed against the real project; record the manual "restore paused project" step in `README.md`
+- [x] 7.1 Provision Supabase directly (not in the Vercel Marketplace CLI catalog), fill `apps/web/.env.local`, run migrations and seed against the real project; record the session-pooler requirement and the "restore paused project" step in `README.md`
 - [x] 7.2 Add `@supabase/ssr` server and browser client helpers in `apps/web/src/lib/supabase/` reading the public env vars
 - [x] 7.3 Add `apps/web/src/proxy.ts` that refreshes the session and redirects unauthenticated `/portal/*` (except `/portal/login`) to the login page; verify against the Next 16 docs in `node_modules/next/dist/docs/`
 - [x] 7.4 Implement `getCurrentEmployee()` (session user joined with `employees`, denies inactive or missing rows) and `requireAdmin()` helpers for Server Components and Server Actions
@@ -68,5 +68,5 @@
 ## 10. Verification and documentation
 
 - [x] 10.1 Run the full unit and integration suites and `pnpm build`; fix regressions
-- [ ] 10.2 Manually exercise: submit a lead in PT and EN, resubmit the same phone, log in as agent and admin, edit a criterion and confirm the audit row, change the threshold
+- [x] 10.2 Manually exercise: submit a lead in PT and EN, resubmit the same phone, log in as agent and admin, edit a criterion and confirm the audit row, change the threshold
 - [x] 10.3 Update `README.md` "State of the build" and the route table; document env vars and the local setup sequence (integration add, env pull, migrate, seed)

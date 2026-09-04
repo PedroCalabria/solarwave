@@ -63,9 +63,11 @@ Supabase is not in the Vercel Marketplace CLI catalog, so provision it directly:
 1. Create a free project at <https://supabase.com/dashboard> (region São Paulo).
 2. In *Project Settings → API* copy the project URL, the anon (or publishable)
    key and the service-role key.
-3. In *Connect* copy the **Transaction pooler** string (port 6543) into
-   `DATABASE_URL` and the **Direct connection** string (port 5432) into
-   `DATABASE_URL_UNPOOLED`.
+3. In *Connect* copy the **Session pooler** string (port 5432) into
+   `DATABASE_URL` and the **Direct connection** string into
+   `DATABASE_URL_UNPOOLED`. Do not use the transaction pooler (port 6543): the
+   driver pipelines the concurrent queries each page fires, which that mode
+   cannot route, and requests hang until the statement timeout fires.
 4. Put them in `apps/web/.env.local`, then:
 
 ```bash

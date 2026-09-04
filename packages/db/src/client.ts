@@ -4,8 +4,22 @@ import { pooledDatabaseUrl } from "./env";
 import * as schema from "./schema";
 
 function createDb(url: string) {
-  // Supabase's transaction pooler does not support prepared statements.
-  const client = postgres(url, { prepare: false, max: 5, idle_timeout: 20 });
+  const client = postgres(url, {
+    // Use Supabase's SESSION pooler (port 5432), not the transaction pooler
+    // (6543). postgres-js pipelines the concurrent queries a page fires from
+    // one `Promise.all` onto a single connection; in transaction mode
+    // Supavisor hands each statement to a different server connection, the
+    // replies stop correlating and the connection stalls in ClientRead with an
+    // open transaction until `statement_timeout` cancels it. Session mode
+    // gives us a dedicated server connection, so pipelining is safe.
+    // These two stay on so the same client still works if a deployment is
+    // pointed at the transaction pooler with serialised queries.
+    prepare: false,
+    fetch_types: false,
+    max: 5,
+    idle_timeout: 20,
+    connect_timeout: 15,
+  });
   return { db: drizzle(client, { schema, casing: "snake_case" }), client };
 }
 

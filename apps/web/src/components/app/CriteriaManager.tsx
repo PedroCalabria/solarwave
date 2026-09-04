@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useActionState, useState, useTransition, type CSSProperties } from "react";
 import {
   deleteCriterionAction,
-  initialActionState,
   saveCriterionAction,
   saveSettingsAction,
   toggleCriterionAction,
 } from "@/app/portal/(shell)/criteria/actions";
+import { initialActionState } from "@/app/portal/(shell)/criteria/state";
 import { DisplayHeading, PillButton } from "@/components/ds/soltera";
 import { QUESTION_BUDGET, formatDateTimeYear, type Criterion } from "@/lib/leads";
 import styles from "@/app/portal/portal.module.css";

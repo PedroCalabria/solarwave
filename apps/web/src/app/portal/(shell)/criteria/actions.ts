@@ -13,17 +13,7 @@ import {
 } from "@solarwave/db";
 import { revalidatePath } from "next/cache";
 import { ForbiddenError, requireAdmin } from "@/lib/auth";
-
-export type ActionState = {
-  ok: boolean;
-  message: string | null;
-  fieldErrors: Record<string, string>;
-  /** Changes on every submission so the client can react to repeated outcomes. */
-  nonce: number;
-};
-
-const idle: ActionState = { ok: false, message: null, fieldErrors: {}, nonce: 0 };
-export const initialActionState = idle;
+import type { ActionState } from "./state";
 
 function revalidate() {
   revalidatePath("/portal/criteria");
