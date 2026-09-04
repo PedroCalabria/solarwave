@@ -1,0 +1,23 @@
+{
+  "name": "@solarwave/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure, I/O-free domain rules for SolarWave: phone, timezone, call window, retry, lifecycle and scoring.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5",
+    "vitest": "^4"
+  }
+}

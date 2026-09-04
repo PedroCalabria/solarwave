@@ -1,9 +1,9 @@
 ## 1. Workspace and tooling
 
-- [ ] 1.1 Create `packages/core` and `packages/db` workspaces (`@solarwave/core`, `@solarwave/db`) with `package.json`, `tsconfig.json` extending a shared base, and `exports` maps; add `test`, `typecheck`, `db:generate`, `db:migrate`, `db:seed` scripts to the root `package.json`
-- [ ] 1.2 Add Vitest to `packages/core` and `packages/db` (unit config, plus an integration config gated on `DATABASE_URL`); add `pnpm test` at the root running both
+- [x] 1.1 Create `packages/core` and `packages/db` workspaces (`@solarwave/core`, `@solarwave/db`) with `package.json`, `tsconfig.json` extending a shared base, and `exports` maps; add `test`, `typecheck`, `db:generate`, `db:migrate`, `db:seed` scripts to the root `package.json`
+- [x] 1.2 Add Vitest to `packages/core` and `packages/db` (unit config, plus an integration config gated on `DATABASE_URL`); add `pnpm test` at the root running both
 - [ ] 1.3 Add `dotenv-cli` and document in `README.md` how `drizzle-kit`, `tsx` scripts and tests load `.env.local`
-- [ ] 1.4 Commit `.claude/` and `openspec/` (currently untracked) so the decision log travels with the repo
+- [x] 1.4 Commit `.claude/` and `openspec/` (currently untracked) so the decision log travels with the repo
 
 ## 2. packages/core — phone and timezone
 
@@ -25,19 +25,19 @@
 
 ## 5. packages/db — schema and migrations
 
-- [ ] 5.1 Write the Drizzle schema for enums (`lead_status`, `attempt_outcome`, `scoring_status`, `criterion_type`, `employee_role`) and tables `leads`, `call_attempts`, `qualification_criteria`, `qualification_answers`, `criteria_audit_log`, `employees`, `settings`, `guardrail_violations`, `intake_rate_limits` per design D2, including the unique index on `leads.phone`, unique `(call_attempt_id, criteria_id)` and unique nullable `twilio_call_sid`
-- [ ] 5.2 Implement the lazy `getDb()` client on postgres-js with `prepare: false` (no Proxy), and generate the initial migration with `drizzle-kit`
-- [ ] 5.3 Write query modules: `leads` (list with filter/search/counts, byId with attempts, answers and latest transcript, KPIs), `criteria` (list active ordered, CRUD), `settings` (get/set), `audit` (list, append), `employees` (byAuthUserId)
-- [ ] 5.4 Implement `applyLeadTransition(leadId, event, ctx)` running `transition()` from core inside a transaction with `SELECT ... FOR UPDATE`; integration test for the concurrent opt-out vs no_answer scenario
-- [ ] 5.5 Implement `createLeadIfNew(input)` using `INSERT ... ON CONFLICT (phone) DO NOTHING RETURNING`, computing `ddd`, `timezone`, `next_call_at` via core; integration tests for created, existing, opt_out untouched, and two concurrent inserts
-- [ ] 5.6 Implement `consumeIntakeRateLimit(ipHash, now)` upserting into `intake_rate_limits` (5 per 60 s window); integration test for the sixth request
+- [x] 5.1 Write the Drizzle schema for enums (`lead_status`, `attempt_outcome`, `scoring_status`, `criterion_type`, `employee_role`) and tables `leads`, `call_attempts`, `qualification_criteria`, `qualification_answers`, `criteria_audit_log`, `employees`, `settings`, `guardrail_violations`, `intake_rate_limits` per design D2, including the unique index on `leads.phone`, unique `(call_attempt_id, criteria_id)` and unique nullable `twilio_call_sid`
+- [x] 5.2 Implement the lazy `getDb()` client on postgres-js with `prepare: false` (no Proxy), and generate the initial migration with `drizzle-kit`
+- [x] 5.3 Write query modules: `leads` (list with filter/search/counts, byId with attempts, answers and latest transcript, KPIs), `criteria` (list active ordered, CRUD), `settings` (get/set), `audit` (list, append), `employees` (byAuthUserId)
+- [x] 5.4 Implement `applyLeadTransition(leadId, event, ctx)` running `transition()` from core inside a transaction with `SELECT ... FOR UPDATE`; integration test for the concurrent opt-out vs no_answer scenario
+- [x] 5.5 Implement `createLeadIfNew(input)` using `INSERT ... ON CONFLICT (phone) DO NOTHING RETURNING`, computing `ddd`, `timezone`, `next_call_at` via core; integration tests for created, existing, opt_out untouched, and two concurrent inserts
+- [x] 5.6 Implement `consumeIntakeRateLimit(ipHash, now)` upserting into `intake_rate_limits` (5 per 60 s window); integration test for the sixth request
 
 ## 6. packages/db — seed
 
-- [ ] 6.1 Port the demo criteria from `apps/web/src/lib/leads.ts` into seed data with `key`, `question_pt`, `question_en`, `expected_value`, `blocking` (homeowner blocking) and keep the credit pre-check inactive; seed `settings` with threshold 70 and share 0.6
-- [ ] 6.2 Port the nine demo leads keeping their ids, statuses, scores, reasons, icebreakers, attempts (mapped to the new outcome enum) and transcripts as jsonb turns; re-point the two `+1` leads to `+55` fixtures and derive their timezone from the DDD
-- [ ] 6.3 Convert the demo bill/roof/owner/timeline fields into `qualification_answers` rows linked to the seeded criteria with `passed` computed by the core engine, and port the six demo audit entries
-- [ ] 6.4 Seed one `admin` and one `agent` Supabase Auth user with the service-role key and matching `employees` rows; make the seed idempotent
+- [x] 6.1 Port the demo criteria from `apps/web/src/lib/leads.ts` into seed data with `key`, `question_pt`, `question_en`, `expected_value`, `blocking` (homeowner blocking) and keep the credit pre-check inactive; seed `settings` with threshold 70 and share 0.6
+- [x] 6.2 Port the nine demo leads keeping their ids, statuses, scores, reasons, icebreakers, attempts (mapped to the new outcome enum) and transcripts as jsonb turns; re-point the two `+1` leads to `+55` fixtures and derive their timezone from the DDD
+- [x] 6.3 Convert the demo bill/roof/owner/timeline fields into `qualification_answers` rows linked to the seeded criteria with `passed` computed by the core engine, and port the six demo audit entries
+- [x] 6.4 Seed one `admin` and one `agent` Supabase Auth user with the service-role key and matching `employees` rows; make the seed idempotent
 
 ## 7. Supabase provisioning and authentication
 

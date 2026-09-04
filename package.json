@@ -5,6 +5,11 @@
   "scripts": {
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @solarwave/db generate",
+    "db:migrate": "pnpm --filter @solarwave/db migrate",
+    "db:seed": "pnpm --filter @solarwave/db seed"
   }
 }
