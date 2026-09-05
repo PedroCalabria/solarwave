@@ -234,12 +234,23 @@ Still unexplained, in order of suspicion:
    guards on a `generating` flag derived from provider events; if those events
    are disordered under load the guard is wrong. The 121 s death is consistent
    with this.
-3. **Free-tier realtime throttling.** Unmeasured. The quota behaviour of a long
-   audio session was never established — task 1.2 only ran short text turns.
+3. **Free-tier realtime exhaustion — now the leading explanation, measured.**
+   Across one day the account degraded monotonically: early spike sessions were
+   perfect, a lone probe held, a 4 s pass held four of thirteen, a 30 s pass
+   held none, and the independent spike script then returned nothing at all.
+   About forty realtime sessions had been opened. Suspicions 1 and 2 are
+   effectively ruled out for the eval, which uses no audio and no wrap-up, yet
+   fails the same way — though either could still contribute in the harness.
 
+- [ ] 7b.0 FIRST, and it costs one session: after the allowance resets, run the
+  spike script alone. If it produces audio again, the day's degradation was
+  quota and every other measurement taken late in the day is void
 - [ ] 7b.1 Establish whether the intermittency survives headphones, in a quiet
-  room, with the 40 ms frames. This separates an acoustic loop from a bridge bug
-  and costs nothing
+  room, with the 40 ms frames. Only meaningful on a fresh allowance, and only
+  after 7b.0 says there is one
+- [ ] 7b.5 Price a paid realtime tier and decide. If a free allowance cannot
+  sustain forty sessions of DEBUGGING, it cannot sustain a demo — and this now
+  sits on the critical path in front of task 13
 - [ ] 7b.2 Log every provider event with a timestamp behind a debug flag, so the
   order of `interrupted`, `turn_complete` and `audio` around a stall is visible
   rather than inferred
@@ -330,8 +341,19 @@ Two bugs of my own, found by this and fixed:
 - The pacing default was four seconds, which the data says is what broke the
   pass.
 
-- [ ] 12.5 Re-run the pass at the wider pacing and record a usable measurement.
-  Nine of thirteen probes have still never been graded against the voice model
+- [ ] 12.5 Re-run the pass and record a usable measurement. THIRTEEN of thirteen
+  probes have still never been graded against the voice model, and the pass
+  cannot produce one until the realtime allowance resets
+
+RE-RUN 2026-09-05 at 30 s pacing: **0 of 13 ran.** Ten empty turns, two 1011s,
+one timeout. Worse than the 4 s pass, which held four — so the pacing theory in
+the previous note was WRONG, and widening the gap was not the fix.
+
+The control that settled it: `packages/voice/src/spike/live.ts`, independent
+code that had produced 182 audio chunks, a full Portuguese transcription and a
+tool call that morning, was run again immediately afterwards and returned zero
+audio, zero transcription and zero tool calls, closing cleanly with 1000. The
+eval is not at fault; the account is out of realtime.
 
 ## 13. End to end, and the write-up
 

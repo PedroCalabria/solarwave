@@ -41,15 +41,15 @@ const CRITERIA: ScriptCriterion[] = SEED_CRITERIA.map((c) => ({
 }));
 
 /**
- * Between sessions, and generous on purpose.
+ * Between sessions. Modest, and NOT a fix for anything.
  *
- * MEASURED 2026-09-05: one probe run alone answered in 35 s and held. The same
- * probe, third in a back-to-back pass four seconds apart, died at 3.2 s with a
- * 1011 — and eleven of thirteen sessions produced nothing. Opening realtime
- * sessions in quick succession on the free tier is what breaks them, so the
- * default now costs wall-clock time rather than a useless report.
+ * An earlier note here claimed pacing was what separated a working session from
+ * a dead one. That was wrong, and the correction is worth keeping: widening the
+ * gap from 4 s to 30 s made the pass WORSE — nine of thirteen failed at 4 s,
+ * thirteen of thirteen at 30 s. The variable was not the gap, it was how many
+ * realtime sessions the account had already opened that day. See task 7b.
  */
-const DELAY_MS = Number(process.env.EVAL_VOICE_DELAY_MS ?? 30_000);
+const DELAY_MS = Number(process.env.EVAL_VOICE_DELAY_MS ?? 8000);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

@@ -138,14 +138,22 @@ context: |
     also produces a 1011. On a real call, lead audio goes through
     `sendRealtimeInput`, which is built for that; client content is only for
     injected instructions such as the wrap-up, and must wait for `turnComplete`.
-  - MEASURED 2026-09-05 (`pnpm eval:voice`, thirteen sessions four seconds
-    apart): realtime sessions opened in quick succession FAIL on the free tier.
-    Four died with 1011, three timed out at 45 s, two completed a turn having
-    produced nothing; only four of thirteen answered. The same probe run alone
-    answered in 35 s and held. No audio was involved in any of it — the pass
-    drives the model with text — so the harness intermittency is not the
-    acoustic loop and not the audio framing. Pace realtime sessions at 30 s and
-    treat a refused session as unmeasured, never as a guardrail failure.
+  - MEASURED 2026-09-05, and this supersedes an earlier reading that blamed
+    pacing: the Gemini free tier appears to have a DAILY realtime allowance,
+    and this account exhausted it. Evidence, in order through one day:
+    the first spike sessions worked perfectly (182 audio chunks, full
+    transcription, tool calls); a probe run alone answered in 35 s and held;
+    a thirteen-probe pass four seconds apart held four; the SAME pass thirty
+    seconds apart held ZERO; and the original spike script — independent code
+    that had worked that morning — then returned no audio, no transcription and
+    no tool call at all, closing cleanly with 1000. Widening the gap made it
+    worse, so the gap was never the variable. Roughly forty realtime sessions
+    had been opened by then.
+  - Consequence, and it is a demo-level one: the free tier may not sustain the
+    handful of real calls the demo needs, let alone debugging them. The
+    unmeasured cost of a paid realtime tier is now on the critical path.
+  - A refused realtime session is unmeasured, never a guardrail failure. Any
+    report that scores one as a violation is lying about the agent.
   - MEASURED: even alone, a single turn from this model takes tens of seconds
     on the free tier. Any claim about conversational latency has to be made
     against a paid tier, not this one.
