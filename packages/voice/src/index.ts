@@ -37,6 +37,13 @@ export {
   type TwilioCallStatus,
 } from "./outcome";
 export {
+  clearFrame,
+  mediaFrame,
+  parseTwilioFrame,
+  type TwilioFrame,
+  type TwilioStart,
+} from "./mediaStream";
+export {
   mintCallToken,
   validateTwilioSignature,
   verifyCallToken,

@@ -11,10 +11,14 @@ import {
 } from "@solarwave/db";
 import {
   CallAudio,
+  clearFrame,
   geminiTransport,
+  mediaFrame,
+  parseTwilioFrame,
   readVoiceConfig,
   startVoiceSession,
   verifyCallToken,
+  type TwilioStart,
   type VoiceSession,
 } from "@solarwave/voice";
 
@@ -31,13 +35,6 @@ import {
 
 /** Throttles the mid-call transcript write. One row, last write wins. */
 const TRANSCRIPT_WRITE_MS = 3000;
-
-type TwilioFrame = {
-  event: "connected" | "start" | "media" | "stop" | "mark";
-  streamSid?: string;
-  start?: { callSid?: string; streamSid?: string; customParameters?: Record<string, string> };
-  media?: { payload?: string };
-};
 
 export async function GET() {
   return experimental_upgradeWebSocket((ws: WebSocket) => {
@@ -59,9 +56,7 @@ async function bridge(ws: WebSocket) {
 
   /** Drops audio Twilio has buffered but not yet played (design D8). */
   const clearPlayback = () => {
-    if (streamSid && ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ event: "clear", streamSid }));
-    }
+    if (streamSid && ws.readyState === ws.OPEN) ws.send(clearFrame(streamSid));
   };
 
   const writeTranscript = async (turns: NonNullable<typeof pending>, force = false) => {
@@ -76,16 +71,12 @@ async function bridge(ws: WebSocket) {
     await persistLiveTranscript(getDb(), attemptId, turns);
   };
 
-  const start = async (frame: TwilioFrame) => {
-    const callSid = frame.start?.callSid;
-    const token = frame.start?.customParameters?.token;
-    streamSid = frame.start?.streamSid ?? frame.streamSid ?? null;
+  const start = async ({ callSid, streamSid: sid, token }: TwilioStart) => {
+    streamSid = sid;
 
     // Twilio does not sign the upgrade, so this token is the only lock. Checked
     // before a model session is opened, so a forged stream costs nothing.
-    if (!callSid || !verifyCallToken(token, callSid, config.streamTokenSecret).ok) {
-      return ws.close();
-    }
+    if (!verifyCallToken(token, callSid, config.streamTokenSecret).ok) return ws.close();
 
     const db = getDb();
     const attempt = await findAttemptByCallSid(db, callSid);
@@ -111,13 +102,7 @@ async function bridge(ws: WebSocket) {
         switch (event.type) {
           case "audio":
             if (streamSid && ws.readyState === ws.OPEN) {
-              ws.send(
-                JSON.stringify({
-                  event: "media",
-                  streamSid,
-                  media: { payload: audio.fromModel(base64Of(event.pcm)) },
-                }),
-              );
+              ws.send(mediaFrame(streamSid, audio.fromModel(base64Of(event.pcm))));
             }
             break;
           case "interrupted":
@@ -147,21 +132,15 @@ async function bridge(ws: WebSocket) {
   };
 
   ws.on("message", (data: WebSocketData) => {
-    let frame: TwilioFrame;
-    try {
-      frame = JSON.parse(String(data)) as TwilioFrame;
-    } catch {
-      return;
-    }
+    const frame = parseTwilioFrame(String(data));
+    if (!frame) return;
 
     switch (frame.event) {
       case "start":
-        void start(frame).catch(() => ws.close());
+        void start(frame.start).catch(() => ws.close());
         break;
       case "media":
-        if (frame.media?.payload && session) {
-          session.sendAudio(audio.fromTelephony(frame.media.payload));
-        }
+        if (session) session.sendAudio(audio.fromTelephony(frame.payload));
         break;
       case "stop":
         session?.stop();
