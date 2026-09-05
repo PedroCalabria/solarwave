@@ -163,12 +163,12 @@ async function main() {
             }
           }
         },
-        onerror: (e: ErrorEvent) => {
+        onerror: (e: { message?: string }) => {
           report.error = String(e.message ?? e);
           console.log(`· error: ${report.error}`);
           done();
         },
-        onclose: (e: CloseEvent) => {
+        onclose: (e: { code?: number; reason?: string }) => {
           report.closeReason = `${e.code} ${e.reason}`.trim();
           console.log(`· closed: ${report.closeReason}`);
           done();

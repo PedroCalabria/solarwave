@@ -29,10 +29,49 @@ but the spike found a trap the design would otherwise have walked into:
 
 ## 2. Spike — the Vercel WebSocket beta on this project
 
-- [ ] 2.1 Confirm Fluid Compute is enabled on the linked project, and add `vercel.json` with `maxDuration: 300` for the media route (design migration plan). The project has no `vercel.json` today
-- [ ] 2.2 Deploy a trivial `GET /api/ws` echo route using `experimental_upgradeWebSocket` from `@vercel/functions` to a preview, and connect to it. Confirm the upgrade works on Next 16 on Hobby, and measure how long a connection actually survives
-- [ ] 2.3 Establish the local development loop and write it down in the README: `next dev` does not perform the upgrade, so the loop is `vercel dev` plus a tunnel, or a preview deployment. Whichever it is, the next twelve sections depend on knowing it
-- [ ] 2.4 STOP CONDITION: if the upgrade does not work, switch to the Fastify-on-Fly.io host for the bridge only and record the decision. Sections 4 to 7 are unaffected either way — that is what design D2 buys
+- [x] 2.1 Confirm Fluid Compute is enabled on the linked project, and add `vercel.json` with `maxDuration: 300` for the media route (design migration plan). The project has no `vercel.json` today
+- [x] 2.2 Deploy a trivial `GET /api/ws` echo route using `experimental_upgradeWebSocket` from `@vercel/functions` to a preview, and connect to it. Confirm the upgrade works on Next 16 on Hobby, and measure how long a connection actually survives
+- [x] 2.3 Establish the local development loop and write it down in the README: `next dev` does not perform the upgrade, so the loop is `vercel dev` plus a tunnel, or a preview deployment. Whichever it is, the next twelve sections depend on knowing it
+- [x] 2.4 STOP CONDITION: if the upgrade does not work, switch to the Fastify-on-Fly.io host for the bridge only and record the decision. Sections 4 to 7 are unaffected either way — that is what design D2 buys
+
+MEASURED 2026-09-05 against a preview deployment of `/api/ws`:
+
+- The upgrade WORKS. HTTP 101 from a Next 16 route handler on Hobby, with
+  bidirectional echo and a server-side heartbeat. The stop condition did not
+  fire and the Fly.io fallback is not needed.
+- The connection survived **305.9 s** and then closed with 1006 and no close
+  frame — the 300 s function limit cutting it, as the design assumed. The 180 s
+  hard stop has comfortable room, and the wrap-up at 90 s more so.
+- `vercel.json` lives at `apps/web/vercel.json`, NOT the repo root: the Vercel
+  project's root directory is `apps/web`, so function patterns are relative to
+  it (`src/app/api/ws/route.ts`). The design's migration plan had the repo-root
+  path and was wrong. A pattern matching no function fails the build, so the
+  `/api/media` entry is added in task 10.2 and not before.
+- FOUND, and it matters for Twilio: the project has **Deployment Protection**
+  on. Every request to a preview gets a 302 to `vercel.com/sso-api`, the
+  WebSocket upgrade included. Twilio cannot present an SSO cookie or an OIDC
+  token, so before task 10 the deployment Twilio talks to needs protection
+  disabled or a bypass configured. Testing from here uses the
+  `x-vercel-trusted-oidc-idp-token` header via `vercel env run`.
+
+- [ ] 2.5 NEW, from the finding above: decide and record how Twilio reaches a
+  protected deployment — protection off for the environment Twilio calls, or
+  Protection Bypass for Automation with the token in the webhook and stream
+  URLs. Blocks task 10, not tasks 4 to 7
+
+MEASURED for the local loop, all three paths probed with the same client:
+
+| Command | Upgrade | Notes |
+| --- | --- | --- |
+| `pnpm dev` (`next dev`) | NO — socket hang up, close 1006 | Next does not expose the upgrade |
+| `vercel dev` | YES — HTTP 101 | The local loop for anything touching `/api/media` |
+| Preview deployment | YES — HTTP 101 | 305.9 s lifetime, then 1006 |
+
+A caution for whoever repeats this: `vercel dev` spawns its own `next dev`
+child on a random port, and that child DOES serve the upgrade because Vercel's
+runtime is in front of it. Probing that port measures `vercel dev`, not
+`next dev`. The row above is from a standalone `next dev` with `vercel dev`
+stopped.
 
 ## 3. Spike — Twilio reality for a Brazilian demo
 
@@ -43,16 +82,28 @@ but the spike found a trap the design would otherwise have walked into:
 
 ## 4. Shared call policy out of `loop.ts`
 
-- [ ] 4.1 Extract the transport-neutral call state into a new module in `packages/agent`: the live-answer map, the opt-out and minor precedence, the requested-callback capture, and `outcomeFor(reason, enoughInformation)` (design D3). Export it from the barrel; it is pure and client-safe
-- [ ] 4.2 Rewire `loop.ts` to use it, deleting the private copies. Every existing loop test must pass unchanged — that is the assertion that the extraction changed nothing
-- [ ] 4.3 Unit-test the extracted module directly: opt-out outranks a stated `end_call` reason, `blocking_failed` maps to `answered_complete` regardless of the answered weight share, and each end reason maps to the outcome the lifecycle expects
+- [x] 4.1 Extract the transport-neutral call state into a new module in `packages/agent`: the live-answer map, the opt-out and minor precedence, the requested-callback capture, and `outcomeFor(reason, enoughInformation)` (design D3). Export it from the barrel; it is pure and client-safe
+- [x] 4.2 Rewire `loop.ts` to use it, deleting the private copies. Every existing loop test must pass unchanged — that is the assertion that the extraction changed nothing
+- [x] 4.3 Unit-test the extracted module directly: opt-out outranks a stated `end_call` reason, `blocking_failed` maps to `answered_complete` regardless of the answered weight share, and each end reason maps to the outcome the lifecycle expects
 
 ## 5. `packages/voice` — audio conversion
 
-- [ ] 5.1 Scaffold `packages/voice` (package.json, tsconfig, vitest config) depending on `@solarwave/agent`, `@solarwave/core` and `@google/genai`, registered in the workspace. The barrel stays client-safe; anything touching `@solarwave/db` goes behind a subpath export (repo convention, learned in change 3)
-- [ ] 5.2 Implement mu-law encode and decode as pure functions over buffers, with the sample rates taken from configuration rather than hard-coded (design D11, D12)
-- [ ] 5.3 Implement the two resamplers as stateful converters that carry their accumulator across frames, so a long call does not drift
-- [ ] 5.4 Unit-test the audio path with no I/O: mu-law round trip within tolerance, output sample count correct over one thousand frames, a continuous tone with no discontinuity at frame boundaries, and correct behaviour when the configured output rate differs from the default
+- [x] 5.1 Scaffold `packages/voice` (package.json, tsconfig, vitest config) depending on `@solarwave/agent`, `@solarwave/core` and `@google/genai`, registered in the workspace. The barrel stays client-safe; anything touching `@solarwave/db` goes behind a subpath export (repo convention, learned in change 3)
+- [x] 5.2 Implement mu-law encode and decode as pure functions over buffers, with the sample rates taken from configuration rather than hard-coded (design D11, D12)
+- [x] 5.3 Implement the two resamplers as stateful converters that carry their accumulator across frames, so a long call does not drift
+- [x] 5.4 Unit-test the audio path with no I/O: mu-law round trip within tolerance, output sample count correct over one thousand frames, a continuous tone with no discontinuity at frame boundaries, and correct behaviour when the configured output rate differs from the default
+
+Twenty tests, no I/O. Two notes worth keeping, both found by the tests rather
+than assumed:
+
+- The resampler trails the input by a bounded number of samples, because an
+  output whose second interpolation endpoint has not arrived waits for the next
+  frame. The tests assert the lag is CONSTANT between 100 frames and 9000
+  (three minutes of 20 ms frames) — a lag that grows is drift, and drift is the
+  actual failure mode.
+- mu-law has two codes for zero and a quantisation floor: +/-1 comes back as 0
+  and +/-4 as +/-8. Both are G.711, not bugs, and both are now pinned by a test
+  so a future rewrite cannot quietly change them.
 
 ## 6. `packages/voice` — the realtime session
 

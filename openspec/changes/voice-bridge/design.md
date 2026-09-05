@@ -286,16 +286,26 @@ against whatever it reports.
 
 ## Risks / Trade-offs
 
-- **The Vercel WebSocket beta may not support this shape at all.** Next's own
-  documentation says WebSockets do not work in route handlers; the escape hatch
-  is `experimental_upgradeWebSocket` from `@vercel/functions`, which is beta,
-  requires Fluid Compute, and is unverified on this project → verified in task 2,
-  before any bridge code, with a trivial echo route deployed to a preview. D2
-  keeps the fallback cheap: the same session function behind a Fastify host.
-- **`next dev` does not perform the upgrade.** The local loop is `vercel dev`
-  plus a tunnel for Twilio's webhooks, which is slower and unfamiliar → the
-  harness (D1) runs against a deployed preview, and the pure halves (audio,
-  timers, outcome mapping, preconditions) are unit-tested with no server at all.
+- **The Vercel WebSocket beta may not support this shape at all.** RESOLVED
+  2026-09-05 (task 2): an echo route on a preview deployment upgraded to HTTP
+  101 from a Next 16 route handler on Hobby and held the connection for 305.9 s
+  before the 300 s function limit closed it with a 1006. The Fly.io fallback is
+  not needed. D2 keeps it cheap anyway, and the finding that the connection
+  really does die at the platform limit is what makes the 180 s hard stop a
+  budget rather than a hope.
+- **`next dev` does not perform the upgrade.** CONFIRMED by measurement: a
+  standalone `next dev` hangs the socket up with no 101, while `vercel dev`
+  returns 101. The local loop is therefore `vercel dev` plus a tunnel for
+  Twilio's webhooks, which is slower and unfamiliar → the pure halves (audio,
+  timers, outcome mapping, preconditions) are unit-tested with no server at
+  all, and the harness (D1) runs against `vercel dev` or a preview.
+- **Deployment Protection blocks Twilio.** FOUND in task 2: the project has it
+  on, so every preview request — the WebSocket upgrade included — gets a 302 to
+  Vercel's SSO. Twilio can present neither an SSO cookie nor an OIDC token →
+  task 2.5 decides between turning protection off for the environment Twilio
+  calls and Protection Bypass for Automation. It blocks task 10 and nothing
+  earlier. Testing from a developer machine uses the
+  `x-vercel-trusted-oidc-idp-token` header through `vercel env run`.
 - **The Twilio trial may not permit a Brazilian number or an outbound call to
   the demo phone.** Trial numbers are limited to the sign-up country, Brazilian
   local numbers require a regulatory bundle, and only verified caller IDs can be
@@ -335,11 +345,14 @@ No database migration. No schema change.
 `@vercel/functions`. Text generation stays on `@ai-sdk/google@3.0.121`; the two
 SDKs do not overlap.
 
-**`vercel.json`** is created — the project has none today:
+**`vercel.json`** is created at `apps/web/vercel.json`, NOT the repo root: the
+Vercel project's root directory is `apps/web`, so function patterns are relative
+to it. A pattern matching no function fails the build, so the media entry only
+appears once that route does:
 
     {
       "functions": {
-        "apps/web/src/app/api/media/route.ts": { "maxDuration": 300 }
+        "src/app/api/media/route.ts": { "maxDuration": 300 }
       }
     }
 
