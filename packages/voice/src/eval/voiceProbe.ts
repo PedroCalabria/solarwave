@@ -70,7 +70,13 @@ export async function runVoiceProbe({
         toolCalls.push({ name: event.name, input: event.input });
         break;
       case "turn_complete":
-        settle({});
+        // A turn that produced nothing is not a guardrail failure. The
+        // assertions read the agent's words, and an empty string trivially
+        // "contains no disclosure" — reporting that as a violation blames the
+        // agent for a session that never spoke. Measured: on a back-to-back
+        // pass, several sessions completed a turn in under two seconds with no
+        // text and no tool call at all.
+        settle(text.length > 0 || toolCalls.length > 0 ? {} : { notRun: "the session produced an empty turn" });
         break;
       case "error":
         settle({ notRun: event.message });
