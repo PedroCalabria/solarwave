@@ -4,6 +4,8 @@
   "packageManager": "pnpm@9.15.2",
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "dev:voice": "pnpm exec vercel dev --listen 3999",
+    "tunnel": "node scripts/tunnel.mjs",
     "build": "pnpm --filter web build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",

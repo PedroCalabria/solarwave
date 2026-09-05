@@ -89,6 +89,50 @@ Supabase free-tier projects pause after a week without traffic. Until the
 keep-alive cron lands (lifecycle change), restore a paused project from the
 Supabase dashboard (*Project → Restore*) before a demo.
 
+### The voice bridge locally
+
+The media bridge needs a WebSocket upgrade, and Next does not perform one. Only
+`vercel dev` and a real deployment do — measured, all three with the same
+client:
+
+| Command | Upgrade | Use it for |
+| --- | --- | --- |
+| `pnpm dev` (`next dev`) | no, the socket hangs up | everything except `/api/media` |
+| `pnpm dev:voice` (`vercel dev`) | yes, HTTP 101 | anything touching the bridge |
+| a deployment | yes, HTTP 101, ~305 s | Twilio, which cannot reach localhost |
+
+Careful when checking this yourself: `vercel dev` spawns its own `next dev`
+child on a random port, and that child *does* serve the upgrade because Vercel's
+runtime sits in front of it. Probing that port measures `vercel dev`.
+
+Twilio needs a public URL, so the bridge runs behind a tunnel:
+
+```bash
+pnpm dev:voice        # vercel dev on port 3999
+pnpm tunnel           # ngrok, and writes VOICE_PUBLIC_BASE_URL into .env.local
+```
+
+`VOICE_PUBLIC_BASE_URL` is the only thing that follows the tunnel: dispatch
+builds the Twilio instruction, status callback and media stream URLs from it on
+every call, so there is no webhook to keep in sync in the Twilio console. The
+free ngrok plan on this account cannot pin a static domain — `--url` with any
+subdomain is refused as a paid "custom subdomain", on `.ngrok-free.dev`,
+`.ngrok-free.app` and `.ngrok.io` alike — which is why `pnpm tunnel` writes the
+variable rather than telling you to.
+
+For a deployed run, point it at the production domain instead:
+
+```
+VOICE_PUBLIC_BASE_URL=https://solarwave-eta.vercel.app
+```
+
+That domain is public. The generated deployment URLs and the preview aliases are
+behind Vercel Authentication and answer a 302 to SSO, which Twilio cannot
+satisfy, so **Twilio only ever talks to production**. The webhooks carry their
+own locks — a Twilio signature on each one, and a short-lived signed token bound
+to the call SID on the media socket — because on production those endpoints are
+publicly reachable and nothing else stands in front of them.
+
 ## Routes
 
 | Route | Screen |
@@ -107,6 +151,8 @@ Supabase dashboard (*Project → Restore*) before a demo.
 | Command | What it does |
 | --- | --- |
 | `pnpm dev` / `pnpm build` | Next.js app |
+| `pnpm dev:voice` | `vercel dev` on port 3999 — the only local server that performs the WebSocket upgrade |
+| `pnpm tunnel` | ngrok to port 3999, writing `VOICE_PUBLIC_BASE_URL` into `apps/web/.env.local` |
 | `pnpm typecheck` / `pnpm lint` | Every workspace |
 | `pnpm build` | Next.js production build — the only check that exercises the server/client module boundary |
 | `pnpm test` | Unit tests in every workspace (web and db integration tests run when `DATABASE_URL` is set) |

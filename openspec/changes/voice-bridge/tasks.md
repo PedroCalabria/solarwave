@@ -54,10 +54,37 @@ MEASURED 2026-09-05 against a preview deployment of `/api/ws`:
   disabled or a bypass configured. Testing from here uses the
   `x-vercel-trusted-oidc-idp-token` header via `vercel env run`.
 
-- [ ] 2.5 NEW, from the finding above: decide and record how Twilio reaches a
+- [x] 2.5 NEW, from the finding above: decide and record how Twilio reaches a
   protected deployment — protection off for the environment Twilio calls, or
   Protection Bypass for Automation with the token in the webhook and stream
   URLs. Blocks task 10, not tasks 4 to 7
+
+SETTLED 2026-09-05, and it needs no setting change. The protection is scoped to
+generated URLs, not to the production domain:
+
+| URL | Result |
+| --- | --- |
+| preview, and the `-pedrocalabriadev` / `-git-main` aliases | 302 to SSO |
+| `https://solarwave-eta.vercel.app` (production domain) | 200, and requests reach the app |
+
+So Twilio talks to the production domain, and nothing is disabled. Protection
+Bypass for Automation was rejected: Twilio cannot set arbitrary headers on a
+webhook, so the secret would travel in the URL — inside the TwiML we generate
+and inside Twilio's request logs — to solve a problem that does not exist.
+
+Two consequences:
+
+- **Twilio only ever reaches production.** Previews stay protected and it cannot
+  authenticate to them. Local work goes through `vercel dev` plus a tunnel.
+- **Task 10's signature verification is the only lock, not a second one.** The
+  moment `/api/twilio/status` ships to production it is a public endpoint that
+  closes attempts, writes transcripts and triggers scoring. The verification
+  goes in the same commit that creates each route — never "wire it up first".
+
+Not yet verified: the WebSocket upgrade on the production domain unauthenticated.
+The current production deployment predates `/api/ws`, and promoting a throwaway
+echo route to production is exposure with no return. Task 10.2 measures it with
+the real route, already signed.
 
 MEASURED for the local loop, all three paths probed with the same client:
 
