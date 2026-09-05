@@ -98,6 +98,8 @@ export const callAttempts = pgTable(
     endedReason: text("ended_reason"),
     twilioCallSid: text("twilio_call_sid"),
     scoringStatus: scoringStatusEnum("scoring_status").notNull().default("pending"),
+    /** When scoring last completed. Null means never scored (design D9). */
+    scoredAt: timestamp("scored_at", { withTimezone: true }),
     transcript: jsonb("transcript").$type<TranscriptTurn[]>(),
     /** created_at + 12 months (spec section 10). */
     transcriptExpiresAt: timestamp("transcript_expires_at", { withTimezone: true }),
@@ -122,7 +124,13 @@ export const qualificationCriteria = pgTable(
     questionPt: text("question_pt").notNull(),
     questionEn: text("question_en").notNull(),
     type: criterionTypeEnum("type").notNull(),
-    /** Rule in the per-type grammar (design D5). Null for free_text. */
+    /**
+     * The vocabulary an enum criterion can be answered with, pipe-separated.
+     * Distinct from `expectedValue`, which is the subset that passes: a lead may
+     * legitimately answer with a value that fails (design D5). Null otherwise.
+     */
+    options: text("options"),
+    /** Rule in the per-type grammar. Null for free_text. */
     expectedValue: text("expected_value"),
     weight: integer("weight").notNull(),
     blocking: boolean("blocking").notNull().default(false),
@@ -209,6 +217,9 @@ export const guardrailViolations = pgTable(
     guardrail: text("guardrail").notNull(),
     severity: text("severity").notNull().default("medium"),
     evidence: text("evidence"),
+    /** Null until an employee reviews it. High severity blocks dispatch until then (design D8b). */
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: uuid("reviewed_by").references(() => employees.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("guardrail_violations_attempt_idx").on(t.callAttemptId)],

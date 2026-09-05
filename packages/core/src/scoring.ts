@@ -47,6 +47,67 @@ export type RuleError = { criterionKey?: string; message: string };
 const NUMERIC_CMP = /^(>=|<=|>|<|=)\s*(-?\d+(?:\.\d+)?)$/;
 const NUMERIC_RANGE = /^(-?\d+(?:\.\d+)?)\s*\.\.\s*(-?\d+(?:\.\d+)?)$/;
 
+/**
+ * Splits a pipe-separated list into normalised members. Shared by the enum rule
+ * and by the `options` vocabulary so the two can never disagree on what a
+ * member is.
+ */
+export function parseOptionList(raw: string | null): string[] {
+  return (raw ?? "")
+    .split("|")
+    .map((v) => v.trim().toLowerCase())
+    .filter((v) => v.length > 0);
+}
+
+export type VocabularyInput = {
+  type: CriterionType;
+  /** Pipe-separated vocabulary. Enum only. */
+  options: string | null;
+  /** Pipe-separated subset of the vocabulary that passes. */
+  expectedValue: string | null;
+};
+
+export type VocabularyError = { field: "options" | "expectedValue"; message: string };
+
+/**
+ * Enforces the split between vocabulary and pass rule (design D5): `options` is
+ * everything a lead can be recorded as answering, `expected_value` is the subset
+ * that passes. Constraining extraction to `expected_value` would make a failing
+ * enum answer unrepresentable, so the two must stay distinct and consistent.
+ */
+export function validateVocabulary({ type, options, expectedValue }: VocabularyInput): VocabularyError[] {
+  const vocabulary = parseOptionList(options);
+
+  if (type !== "enum") {
+    return vocabulary.length > 0
+      ? [{ field: "options", message: "only enum criteria have an options vocabulary" }]
+      : [];
+  }
+
+  const errors: VocabularyError[] = [];
+  if (vocabulary.length < 2) {
+    errors.push({ field: "options", message: 'enum criteria need at least two options separated by "|"' });
+  }
+  if (new Set(vocabulary).size !== vocabulary.length) {
+    errors.push({ field: "options", message: "options must not repeat a value" });
+  }
+
+  const accepted = parseOptionList(expectedValue);
+  if (accepted.length === 0) {
+    errors.push({ field: "expectedValue", message: "an enum criterion must accept at least one option" });
+    return errors;
+  }
+
+  const outside = accepted.filter((v) => !vocabulary.includes(v));
+  if (outside.length > 0) {
+    errors.push({
+      field: "expectedValue",
+      message: `not one of the options: ${outside.join(", ")}`,
+    });
+  }
+  return errors;
+}
+
 /** Parses `expected_value` for a criterion type. */
 export function parseExpectedValue(type: CriterionType, raw: string | null): Result<Rule, RuleError> {
   const text = (raw ?? "").trim();
@@ -77,10 +138,7 @@ export function parseExpectedValue(type: CriterionType, raw: string | null): Res
     }
 
     case "enum": {
-      const accepted = text
-        .split("|")
-        .map((v) => v.trim().toLowerCase())
-        .filter((v) => v.length > 0);
+      const accepted = parseOptionList(text);
       if (accepted.length === 0) return err({ message: 'enum criteria expect accepted values separated by "|"' });
       return ok({ kind: "enum", accepted });
     }

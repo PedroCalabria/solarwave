@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.6.1",
+    "@solarwave/ai": "workspace:^",
     "@solarwave/core": "workspace:^",
     "@solarwave/db": "workspace:^",
+    "@solarwave/scoring": "workspace:^",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.115.0",
     "lucide-react": "^1.40.0",

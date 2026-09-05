@@ -7,7 +7,7 @@ import styles from "@/app/portal/portal.module.css";
 
 type Props = {
   employee: { name: string; role: "agent" | "admin" };
-  counts: { leads: number; criteria: number; audit: number };
+  counts: { leads: number; criteria: number; audit: number; violations: number };
 };
 
 function initials(name: string): string {
@@ -25,6 +25,7 @@ export function PortalSidebar({ employee, counts }: Props) {
   const nav = [
     { href: "/portal/leads", label: "Leads", count: String(counts.leads) },
     { href: "/portal/criteria", label: "Criteria", count: String(counts.criteria) },
+    { href: "/portal/violations", label: "Guardrails", count: String(counts.violations) },
     { href: "/portal/audit", label: "Audit history", count: String(counts.audit) },
   ];
 

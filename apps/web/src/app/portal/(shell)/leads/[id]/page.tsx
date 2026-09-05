@@ -1,4 +1,6 @@
 import { getDb, getLeadDetail, getSettings } from "@solarwave/db";
+import { reportStaleness } from "@solarwave/scoring";
+import { StalenessBanner } from "@/components/app/StalenessBanner";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DisplayHeading } from "@/components/ds/soltera";
@@ -18,6 +20,12 @@ import detail from "./detail.module.css";
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Below this the answer is flagged for a human to check. It never changes the
+ * score: confidence is recorded and displayed, never acted on (design D7).
+ */
+const LOW_CONFIDENCE = 0.6;
 
 function scoreNote(status: string, score: number | null, threshold: number, failedBlocking: boolean): string {
   if (status === "calling") return "Score is computed when the call ends.";
@@ -52,6 +60,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
   const badge = STATUS[lead.status];
   const colour = scoreColor(lead.score, settings.handoffThreshold);
+  const staleness = lead.latestScoredAttempt ? await reportStaleness(getDb(), lead.latestScoredAttempt.id) : null;
+  const lowConfidence = (lead.latestScoredAttempt?.answers ?? []).filter(
+    (a) => a.confidence !== null && Number(a.confidence) < LOW_CONFIDENCE,
+  ).length;
+
   const answers = [...(lead.latestScoredAttempt?.answers ?? [])].sort(
     (a, b) => a.criterion.sortOrder - b.criterion.sortOrder,
   );
@@ -97,6 +110,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <div className={detail.grid}>
         <div className={detail.column}>
+          {staleness && lead.latestScoredAttempt ? (
+            <StalenessBanner
+              staleness={staleness}
+              attemptId={lead.latestScoredAttempt.id}
+              leadId={lead.id}
+            />
+          ) : null}
+
           {/* ---- Score, reason, icebreaker ---- */}
           <div style={{ background: "var(--surface-card)", borderRadius: "var(--radius-xl)", padding: 22 }}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "var(--space-4)" }}>
@@ -153,7 +174,14 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           {/* ---- Qualification answers (criteria-driven) ---- */}
           <div className={styles.panel}>
             <div className={detail.panelHead} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}>
-              <span>Qualification answers</span>
+              <span>
+                Qualification answers
+                {lowConfidence > 0 ? (
+                  <span style={{ marginLeft: 8, fontSize: "var(--body-3)", color: "var(--text-muted)", fontWeight: 400 }}>
+                    {lowConfidence} to review
+                  </span>
+                ) : null}
+              </span>
               <span className={styles.mono} style={{ letterSpacing: ".1em" }}>
                 {lead.latestScoredAttempt ? `attempt ${lead.latestScoredAttempt.attemptNumber}` : "no answers yet"}
               </span>
@@ -169,9 +197,39 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                     <dt className={styles.mono} style={{ letterSpacing: ".1em", margin: 0 }}>
                       {a.criterion.label}
                       {a.criterion.blocking ? " · blocking" : ""}
+                      {a.evidence ? (
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontFamily: "inherit",
+                            letterSpacing: "normal",
+                            fontSize: "var(--body-3)",
+                            color: "var(--text-muted)",
+                            fontStyle: "italic",
+                            maxWidth: "34ch",
+                          }}
+                        >
+                          “{a.evidence}”
+                        </div>
+                      ) : null}
                     </dt>
                     <dd style={{ fontSize: "var(--body-3)", color: "var(--text-strong)", textAlign: "right", margin: 0, display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
                       <span>{a.extractedValue ?? String(a.normalizedValue ?? "—")}</span>
+                      {a.confidence !== null && Number(a.confidence) < LOW_CONFIDENCE ? (
+                        <span
+                          title={`Extraction confidence ${Number(a.confidence).toFixed(2)}. The score is unaffected; a human should check this answer.`}
+                          style={{
+                            fontFamily: "var(--font-mono)",
+                            fontSize: "var(--label-2)",
+                            padding: "2px 7px",
+                            borderRadius: "var(--radius-xs)",
+                            background: "rgba(217, 119, 6, 0.12)",
+                            color: "#b45309",
+                          }}
+                        >
+                          review
+                        </span>
+                      ) : null}
                       <span
                         aria-label={a.passed === null ? "not evaluated" : a.passed ? "passed" : "failed"}
                         title={a.passed === null ? "not evaluated" : a.passed ? "passed" : "failed"}

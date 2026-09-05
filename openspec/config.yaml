@@ -19,19 +19,23 @@ context: |
   - The highlight of the product is the automation: scheduling, the LLM voice
     call and the LLM-assisted qualification. Give those parts the most care.
 
-  ## Repository state (2026-09-03)
-  - pnpm monorepo. `apps/web` = Next.js 16 (App Router, React 19). All screens
-    exist and match the design: landing `/pt` `/en`, confirmation, portal login,
-    leads dashboard, lead detail, criteria, audit. Demo data in
-    `apps/web/src/lib/leads.ts`. Intake `POST /api/leads` validates, normalises
-    phone, dedups and rate-limits IN PROCESS MEMORY only.
-  - Not built yet: database, auth, CAPTCHA, scheduler, voice bridge, scoring
-    worker, transcript retention job. `packages/` is empty.
-  - Known drift between spec, demo data and UI (must be resolved by schema):
-    blocking criteria, configurable hand-off threshold (70 in UI), criterion
-    question text (UI) vs expected_value (spec), callback-requested retry,
-    intermediate state between call end and scoring, "answered but incomplete"
-    outcome.
+  ## Repository state (2026-09-05)
+  - pnpm monorepo. `apps/web` = Next.js 16 (App Router, React 19), plus
+    `packages/core` (pure domain rules), `packages/db` (Drizzle + Supabase),
+    `packages/ai` (AI SDK adapters) and `packages/scoring` (the worker).
+  - Done: database and migrations, Supabase Auth, Turnstile, DB-backed rate
+    limiting and dedup, the portal on real data, criteria CRUD with audit, the
+    deterministic scoring engine, and the scoring worker (extraction, narrative,
+    guardrail judge, recomputation).
+  - Not built yet: `leadWorkflow` and any call trigger, the voice bridge,
+    Twilio, the transcript purge and keep-alive crons. `workflow_run_id` exists
+    as a column with nothing writing it.
+  - Demo transcripts and their hand-written expected answers live in
+    `packages/db/src/seed/data.ts`, exported as the golden set through
+    `@solarwave/scoring`. `apps/web/src/lib/leads.ts` is presentation helpers
+    only and holds no records.
+  - Integration tests run on PGlite when no DATABASE_URL is reachable, so they
+    need no server (`packages/db/src/test/harness.ts`).
 
   ## Target architecture (decided)
   Everything runs on Vercel (Hobby). No separate always-on service.
@@ -73,8 +77,20 @@ context: |
     everything text/structured-output. `@google/genai` Live client ONLY for the
     realtime call (AI SDK does not cover bidirectional realtime audio). Never
     trust memory for AI SDK APIs; read `node_modules/ai/docs/`.
-  - Free-tier terms allow Google to use content to improve products. Fine for
-    demo; would require the paid tier before any real customer data.
+  - VERIFIED 2026-09-05: the Vercel AI Gateway is NOT usable on a free account.
+    It refuses every request, free credits included, until a payment method is
+    on file ("AI Gateway requires a valid credit card on file to service
+    requests"). DECIDED: text calls go to Google AI Studio directly with a free
+    key (`@ai-sdk/google`, env var GOOGLE_GENERATIVE_AI_API_KEY, no card).
+    Pin `@ai-sdk/google@3.0.121`; v4 needs a newer provider spec than ai@6 has.
+  - Consequence: free-tier terms allow Google to use content to improve their
+    products, for the text calls as well as the realtime one. Acceptable for a
+    demo only; a paid tier is required before any real customer data.
+  - Model ids are PLAIN, with no provider prefix: `gemini-3.8-flash`, never
+    `google/gemini-3.8-flash`. List them rather than trusting memory:
+    curl -H "x-goog-api-key: $GOOGLE_GENERATIVE_AI_API_KEY"       "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"
+  - Both halves of the product now use the same provider and key: text through
+    @ai-sdk/google, realtime audio through @google/genai.
   - Transcripts come from Gemini Live input/output transcription. Call audio is
     never stored (spec section 10).
 
@@ -160,8 +176,10 @@ context: |
      (phone, DDD->tz, call window, retry, scoring engine, state machine, tests),
      intake on DB with unique phone index + workflow start, portal on DB,
      criteria CRUD + audit persisted, employee auth, threshold setting.
-  2. scoring-worker — extraction, engine wiring, reason/icebreaker, guardrail
-     judge, re-scoring, fixtures from demo transcripts.
+  2. scoring-worker — DONE. Extraction under a criteria-derived schema, engine
+     wiring, reason/icebreaker, guardrail judge, manual recomputation, golden
+     fixtures. Split the enum `options` vocabulary from the `expected_value`
+     pass rule; `packages/ai` and `packages/scoring` were added here.
   3. conversation-agent-text — prompt assembly from criteria, tools schema,
      question linter, simulated-lead eval suite.
   4. voice-bridge — Twilio webhooks, Media Streams WS, Gemini Live, resample,
@@ -171,8 +189,9 @@ context: |
      Supabase keep-alive cron, cost per call, realtime dashboard.
 
   ## Open questions (settle inside the relevant change's design.md)
-  - Intermediate status between call end and scoring: keep `calling` until
-    scored, or add `scoring` to the lifecycle (affects the UI STATUS map).
+  - SETTLED by scoring-worker (design D2): the lead stays `calling` while its
+    attempt is scored. No `scoring` status was added; `call_attempts.scoring_status`
+    carries the machine-facing detail.
   - Callback-requested: honour the lead's requested time inside the window as
     the next attempt (recommended) vs. follow the fixed 15 m / 2 d policy.
   - Whether the Twilio trial announcement/verification limits force a paid

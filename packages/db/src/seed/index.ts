@@ -162,6 +162,7 @@ export async function seed(db: Db): Promise<void> {
             questionPt: c.questionPt,
             questionEn: c.questionEn,
             type: c.type,
+            options: c.options,
             expectedValue: c.expectedValue,
             weight: c.weight,
             blocking: c.blocking,
