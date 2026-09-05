@@ -3,13 +3,30 @@
  * are read from Google's model list (design D12). Each call role gets its own
  * variable so the eval can compare models without touching code.
  */
-export const MODEL_ROLES = ["extraction", "narrative", "judge"] as const;
+export const MODEL_ROLES = [
+  "extraction",
+  "narrative",
+  "judge",
+  "conversation",
+  "persona",
+  "linter",
+] as const;
 export type ModelRole = (typeof MODEL_ROLES)[number];
 
+/**
+ * Two prefixes, each honest about its domain (design D3 of
+ * `conversation-agent-text`). The scoring variables were deliberately NOT
+ * renamed to a neutral `AI_MODEL_*`: that would have been tidier in the
+ * abstract and would have broken every `.env.local`, the Vercel project
+ * settings and the measured note in `.env.example`, for no behavioural gain.
+ */
 const ENV_VAR: Record<ModelRole, string> = {
   extraction: "SCORING_MODEL_EXTRACTION",
   narrative: "SCORING_MODEL_NARRATIVE",
   judge: "SCORING_MODEL_JUDGE",
+  conversation: "AGENT_MODEL_CONVERSATION",
+  persona: "AGENT_MODEL_PERSONA",
+  linter: "AGENT_MODEL_LINTER",
 };
 
 /** The variable `@ai-sdk/google` reads by default, sent as `x-goog-api-key`. */

@@ -18,6 +18,9 @@ apps/
 packages/
   core/           Pure domain rules: phone, timezone, call window, retry, lifecycle, scoring (no I/O)
   db/             Drizzle schema, migrations, seed and query functions for Postgres (Supabase)
+  ai/             Thin, mockable adapters over the AI SDK: structured output and conversation turns
+  scoring/        The scoring worker: extraction, narrative, guardrail judge, recomputation
+  agent/          The conversation agent: call script, tools, loop, question linter, persona eval
 openspec/         Decision log (config.yaml) and change proposals, designs, specs and tasks
 ```
 
@@ -95,7 +98,7 @@ Supabase dashboard (*Project → Restore*) before a demo.
 | `/portal/login` | Employee sign-in (Supabase Auth) |
 | `/portal/leads?status=&q=` | Leads dashboard |
 | `/portal/leads/[id]` | Lead detail: score, criteria-driven answers, attempts, transcript |
-| `/portal/criteria` | Qualification criteria and scoring settings (admin edits, agents read) |
+| `/portal/criteria` | Qualification criteria, call order preview and scoring settings (admin edits, agents read) |
 | `/portal/audit` | Criteria and settings audit history |
 | `POST /api/leads` | Intake API |
 
@@ -105,10 +108,13 @@ Supabase dashboard (*Project → Restore*) before a demo.
 | --- | --- |
 | `pnpm dev` / `pnpm build` | Next.js app |
 | `pnpm typecheck` / `pnpm lint` | Every workspace |
+| `pnpm build` | Next.js production build — the only check that exercises the server/client module boundary |
 | `pnpm test` | Unit tests in every workspace (web and db integration tests run when `DATABASE_URL` is set) |
 | `pnpm --filter @solarwave/db test:integration` | Database tests through `.env.local` |
 | `pnpm db:generate` | New Drizzle migration from `packages/db/src/schema.ts` |
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / load demo data (idempotent) |
+| `pnpm eval` | Extraction and guardrail-judge eval against the real model (not in CI) |
+| `pnpm eval:agent` | Conversation agent eval: guardrail probes and persona flows (not in CI) |
 
 ## State of the build
 
@@ -127,7 +133,35 @@ Done in the `persistent-foundations` change:
 - **Portal** reads and writes the database behind Supabase Auth with
   `agent`/`admin` roles. Every criteria and settings change is audited.
 
-Not built yet, in order: scoring worker (LLM extraction, reason and icebreaker,
-guardrail judge), conversation agent and its text evals, Twilio + Gemini Live
-voice bridge, and the lifecycle workflow that actually places and retries calls.
-Intake records `next_call_at`, but no call is dispatched.
+Done in the `scoring-worker` change:
+
+- **Scoring worker.** LLM extraction under a criteria-derived schema, the
+  deterministic engine, reason and icebreaker, a guardrail judge writing
+  `guardrail_violations`, and manual recomputation from the portal.
+
+Done in the `conversation-agent-text` change:
+
+- **The call script is assembled from the active criteria.** A fixed frame
+  carries the AI disclosure, the tone rules and every spec section 6 guardrail;
+  the criteria fill only the middle, in the lead's language, ordered
+  blocking-first. Deactivating a criterion shortens the next call with no code
+  change.
+- **A provider-neutral tool contract** — `record_answer`, `request_callback`,
+  `mark_opt_out`, `flag_minor`, `end_call` — projected to both the AI SDK and
+  Gemini Live function declarations, so the voice bridge changes the transport
+  and not the contract.
+- **Question linter**: advisory warnings about tone and guardrail conflicts when
+  an admin saves a criterion. It never blocks or delays a save and returns no
+  warnings on any model failure.
+- **Persona evaluation** (`pnpm eval:agent`): thirteen single-turn guardrail
+  probes plus four full flows against scripted personas, budgeted at roughly 39
+  model requests. Out of CI, like the scoring eval.
+- **Simulated calls**: an admin action on the lead detail runs the real agent
+  against a simulated lead, writes a genuine attempt marked `simulated` and
+  scores it. Closes conversation → transcript → extraction → score → narrative →
+  judge with no telephony.
+
+Not built yet, in order: the Twilio + Gemini Live voice bridge, and the
+lifecycle workflow that actually places and retries calls. Intake records
+`next_call_at`, but no real call is dispatched — a simulated one is the only way
+to exercise the pipeline end to end today.
