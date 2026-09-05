@@ -1,7 +1,7 @@
 # lead-lifecycle Specification
 
 ## Purpose
-TBD - created by archiving change persistent-foundations. Update Purpose after archive.
+The state machine a lead moves through, from `new` to a terminal status. Transitions are computed by a pure function and applied under a row lock; opt-out is terminal and overrides everything (spec sections 4.5, 6 and 7).
 ## Requirements
 ### Requirement: Lead status follows the spec state machine
 A lead SHALL be in exactly one of `new`, `calling`, `waiting_retry`, `no_answer_final`, `qualified`, `disqualified`, `opt_out`, and transitions SHALL be computed by a pure function that rejects any transition not in the allowed table.

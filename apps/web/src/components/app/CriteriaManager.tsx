@@ -45,7 +45,7 @@ const errorStyle: CSSProperties = { fontSize: "var(--body-3)", color: "var(--ink
 const EXPECTED_HINT: Record<CriterionType, string> = {
   boolean: '"true" or "false"',
   numeric: '">= 300", "< 2000" or a range "300..1500"',
-  enum: 'accepted values separated by "|", e.g. "ceramic|metal"',
+  enum: 'which options pass, separated by "|" — a subset of the vocabulary above',
   free_text: "no rule — passes when answered",
 };
 
@@ -56,6 +56,7 @@ type FormState = {
   questionPt: string;
   questionEn: string;
   type: CriterionType;
+  options: string;
   expectedValue: string;
   weight: string;
   blocking: boolean;
@@ -69,6 +70,7 @@ const EMPTY_FORM: FormState = {
   questionPt: "",
   questionEn: "",
   type: "boolean",
+  options: "",
   expectedValue: "true",
   weight: "10",
   blocking: false,
@@ -124,6 +126,7 @@ export function CriteriaManager({ criteria, settings, recentAudit, canEdit }: Pr
       questionPt: c.questionPt,
       questionEn: c.questionEn,
       type: c.type,
+      options: c.options ?? "",
       expectedValue: c.expectedValue ?? "",
       weight: String(c.weight),
       blocking: c.blocking,
@@ -454,6 +457,7 @@ export function CriteriaManager({ criteria, settings, recentAudit, canEdit }: Pr
                       setForm((f) => ({
                         ...f,
                         type,
+                        options: type === "enum" ? f.options : "",
                         expectedValue: type === "boolean" ? "true" : type === "free_text" ? "" : f.expectedValue,
                       }));
                     }}
@@ -481,6 +485,27 @@ export function CriteriaManager({ criteria, settings, recentAudit, canEdit }: Pr
                   {fieldError("weight") ? <div style={errorStyle}>{fieldError("weight")}</div> : null}
                 </div>
               </div>
+
+              {form.type === "enum" ? (
+                <div>
+                  <label htmlFor="c-options" style={labelStyle}>
+                    Options (vocabulary)
+                  </label>
+                  <input
+                    id="c-options"
+                    name="options"
+                    value={form.options}
+                    onChange={(e) => setForm((f) => ({ ...f, options: e.target.value }))}
+                    placeholder="this_month|within_3_months|within_6_months"
+                    style={{ ...controlStyle, fontFamily: "var(--font-mono)" }}
+                  />
+                  <div style={{ fontSize: "var(--body-3)", color: "var(--text-muted)", marginTop: 4, paddingLeft: 4 }}>
+                    Every value the lead can be recorded as answering. Expected value below is the subset that passes,
+                    so a lead may answer with a value that fails.
+                  </div>
+                  {fieldError("options") ? <div style={errorStyle}>{fieldError("options")}</div> : null}
+                </div>
+              ) : null}
 
               <div>
                 <label htmlFor="c-expected" style={labelStyle}>

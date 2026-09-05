@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, gt } from "drizzle-orm";
 import type { DbOrTx } from "../client";
 import { criteriaAuditLog, employees, qualificationCriteria, type AuditEntry } from "../schema";
 
@@ -46,4 +46,34 @@ export async function listAudit(db: DbOrTx, limit = 200): Promise<AuditRow[]> {
 export async function countAudit(db: DbOrTx): Promise<number> {
   const rows = await db.select({ id: criteriaAuditLog.id }).from(criteriaAuditLog);
   return rows.length;
+}
+
+export type AuditChangeRow = { field: string; oldValue: string | null; newValue: string | null; changedAt: Date };
+
+/**
+ * Criteria and settings changes newer than a point in time, newest first. The
+ * recomputation classifier reads these to decide whether a stale score needs a
+ * free re-score or a model call.
+ */
+export async function auditChangesSince(db: DbOrTx, since: Date): Promise<AuditChangeRow[]> {
+  return db
+    .select({
+      field: criteriaAuditLog.field,
+      oldValue: criteriaAuditLog.oldValue,
+      newValue: criteriaAuditLog.newValue,
+      changedAt: criteriaAuditLog.changedAt,
+    })
+    .from(criteriaAuditLog)
+    .where(gt(criteriaAuditLog.changedAt, since))
+    .orderBy(desc(criteriaAuditLog.changedAt));
+}
+
+/** When criteria or settings last changed at all. Null when never. */
+export async function latestCriteriaChangeAt(db: DbOrTx): Promise<Date | null> {
+  const [row] = await db
+    .select({ changedAt: criteriaAuditLog.changedAt })
+    .from(criteriaAuditLog)
+    .orderBy(desc(criteriaAuditLog.changedAt))
+    .limit(1);
+  return row?.changedAt ?? null;
 }

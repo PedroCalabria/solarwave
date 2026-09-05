@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
-    "./test": "./src/test/harness.ts"
+    "./test": "./src/test/harness.ts",
+    "./seed": "./src/seed/data.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",
@@ -25,6 +26,7 @@
     "postgres": "^3.4.9"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^22",
     "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.10",

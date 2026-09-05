@@ -26,6 +26,8 @@ export {
 } from "./lifecycle";
 export {
   parseExpectedValue,
+  parseOptionList,
+  validateVocabulary,
   evaluateRule,
   evaluateAnswer,
   hasEnoughInformation,
@@ -39,6 +41,8 @@ export {
   type AnswerValue,
   type Rule,
   type RuleError,
+  type VocabularyInput,
+  type VocabularyError,
   type ScoreInput,
   type ScoreResult,
 } from "./scoring";

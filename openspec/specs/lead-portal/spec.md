@@ -1,7 +1,7 @@
 # lead-portal Specification
 
 ## Purpose
-TBD - created by archiving change persistent-foundations. Update Purpose after archive.
+What employees see and can act on: the leads dashboard and its KPIs, the lead detail with attempts, answers, evidence and transcript, the guardrail violations queue, and the criteria and audit pages (spec section 5.2).
 ## Requirements
 ### Requirement: Leads dashboard reads from the database
 The leads dashboard SHALL list persisted leads with name, phone, email, score, qualification reason, icebreaker and status, SHALL support filtering by status and free-text search over name, phone and email, and SHALL compute status counts from the database.

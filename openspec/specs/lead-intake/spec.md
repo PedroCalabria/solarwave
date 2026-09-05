@@ -1,7 +1,7 @@
 # lead-intake Specification
 
 ## Purpose
-TBD - created by archiving change persistent-foundations. Update Purpose after archive.
+What happens when the landing-page form is submitted: validation, phone normalisation to E.164, CAPTCHA, database-backed rate limiting, atomic deduplication by phone, and scheduling the first attempt inside the allowed window (spec sections 3 and 4.1).
 ## Requirements
 ### Requirement: Intake validates and normalises the submission
 The intake API SHALL accept `name`, `phone`, `email` and `preferredCallLanguage`, reject invalid payloads with field-level errors, normalise the phone to E.164 with Brazil as the default region, and default the call language to `pt` when missing or unrecognised.

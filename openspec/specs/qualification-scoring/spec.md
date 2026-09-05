@@ -1,7 +1,7 @@
 # qualification-scoring Specification
 
 ## Purpose
-TBD - created by archiving change persistent-foundations. Update Purpose after archive.
+The deterministic scoring engine: how an answer is evaluated against a criterion's `expected_value` per type, how the score is normalised over active weight, how a failed blocking criterion overrides it, and how the hand-off threshold decides qualification. A pure function of `{criteria, answers, settings}` that performs no I/O (spec section 4.6).
 ## Requirements
 ### Requirement: Expected value is evaluated per criterion type
 The scoring engine SHALL evaluate an answer against a criterion's `expected_value` according to its type: boolean matches `true` or `false`; numeric satisfies a comparator expression (`>=`, `>`, `<=`, `<`, `=`) or an inclusive range `a..b`; enum matches any value in a pipe-separated list; free_text passes whenever an answer exists.

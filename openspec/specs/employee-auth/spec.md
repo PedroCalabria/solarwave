@@ -1,7 +1,7 @@
 # employee-auth Specification
 
 ## Purpose
-TBD - created by archiving change persistent-foundations. Update Purpose after archive.
+Who may open the portal and what they may do there: Supabase Auth sessions backed by the `employees` table, the agent and admin roles, and the route guards that separate reading leads from mutating criteria (spec section 5.1).
 ## Requirements
 ### Requirement: Portal routes require an authenticated employee
 Every route under `/portal` except `/portal/login` SHALL require a valid Supabase Auth session whose user id matches an active row in `employees`; otherwise the request SHALL be redirected to `/portal/login`.

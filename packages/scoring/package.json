@@ -1,0 +1,29 @@
+{
+  "name": "@solarwave/scoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The scoring worker: answer extraction, engine wiring, narrative, guardrail judge and recomputation.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "eval": "dotenv -e ../../apps/web/.env.local -- tsx src/eval/run.ts"
+  },
+  "dependencies": {
+    "@solarwave/ai": "workspace:*",
+    "@solarwave/core": "workspace:*",
+    "@solarwave/db": "workspace:*",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5",
+    "vitest": "^4",
+    "dotenv-cli": "^11.0.0",
+    "tsx": "^4.23.13"
+  }
+}

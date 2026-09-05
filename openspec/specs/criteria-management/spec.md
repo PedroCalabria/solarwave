@@ -1,7 +1,7 @@
 # criteria-management Specification
 
 ## Purpose
-TBD - created by archiving change persistent-foundations. Update Purpose after archive.
+How employees define what qualifies a lead: the fields a criterion carries, the vocabulary an enum criterion can be answered with versus the subset that passes, the hand-off threshold and answered-share settings, and the audit trail that records every change (spec sections 5.3 and 5.4).
 ## Requirements
 ### Requirement: Criteria carry the fields the agent and the engine need
 A qualification criterion SHALL have a unique `key`, `label`, `question_pt`, `question_en`, `type` (`boolean|numeric|enum|free_text`), `expected_value`, integer `weight` between 0 and 100, `blocking`, `active`, `sort_order` and `updated_by`.

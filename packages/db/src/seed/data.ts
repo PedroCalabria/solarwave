@@ -28,6 +28,7 @@ export type SeedCriterion = {
   questionPt: string;
   questionEn: string;
   type: CriterionType;
+  options: string | null;
   expectedValue: string | null;
   weight: number;
   blocking: boolean;
@@ -43,6 +44,7 @@ export const CRITERIA: SeedCriterion[] = [
     questionPt: "O imóvel é seu ou alugado?",
     questionEn: "Do you own the property or rent it?",
     type: "boolean",
+    options: null,
     expectedValue: "true",
     weight: 30,
     blocking: true,
@@ -56,6 +58,7 @@ export const CRITERIA: SeedCriterion[] = [
     questionPt: "Qual foi o valor aproximado da última conta de luz?",
     questionEn: "Roughly what is your monthly electricity bill?",
     type: "numeric",
+    options: null,
     expectedValue: ">= 300",
     weight: 25,
     blocking: false,
@@ -69,6 +72,7 @@ export const CRITERIA: SeedCriterion[] = [
     questionPt: "Se a proposta fizer sentido, em quanto tempo você pensaria em instalar?",
     questionEn: "If the numbers work, when would you look to install?",
     type: "enum",
+    options: "this_month|within_3_months|within_6_months|not_sure",
     expectedValue: "this_month|within_3_months",
     weight: 20,
     blocking: false,
@@ -82,6 +86,7 @@ export const CRITERIA: SeedCriterion[] = [
     questionPt: "O telhado é de telha cerâmica, metálico ou laje?",
     questionEn: "Is the roof ceramic tile, metal or concrete slab?",
     type: "enum",
+    options: "ceramic|metal|slab|fiber_cement",
     expectedValue: "ceramic|metal",
     weight: 15,
     blocking: false,
@@ -95,6 +100,7 @@ export const CRITERIA: SeedCriterion[] = [
     questionPt: "Você sabe mais ou menos qual é a área do telhado, em metros quadrados?",
     questionEn: "Do you know roughly how large the roof area is, in square metres?",
     type: "numeric",
+    options: null,
     expectedValue: ">= 30",
     weight: 10,
     blocking: false,
@@ -108,6 +114,7 @@ export const CRITERIA: SeedCriterion[] = [
     questionPt: "Você gostaria de receber também uma simulação de financiamento?",
     questionEn: "Would you want financing quoted alongside cash?",
     type: "boolean",
+    options: null,
     expectedValue: "true",
     weight: 10,
     blocking: false,

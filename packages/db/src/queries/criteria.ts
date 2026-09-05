@@ -1,4 +1,4 @@
-import { parseExpectedValue, type CriterionType } from "@solarwave/core";
+import { parseExpectedValue, validateVocabulary, type CriterionType } from "@solarwave/core";
 import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import type { DbOrTx } from "../client";
 import { qualificationCriteria, type Criterion } from "../schema";
@@ -12,6 +12,8 @@ export type CriterionInput = {
   questionPt: string;
   questionEn: string;
   type: CriterionType;
+  /** Pipe-separated vocabulary for enum criteria. Null otherwise (design D5). */
+  options: string | null;
   expectedValue: string | null;
   weight: number;
   blocking: boolean;
@@ -34,6 +36,13 @@ export function validateCriterionInput(input: CriterionInput): CriterionFieldErr
   }
   const rule = parseExpectedValue(input.type, input.expectedValue);
   if (!rule.ok) errors.push({ field: "expectedValue", message: rule.error.message });
+
+  // The vocabulary and the pass rule are different things: a lead may answer
+  // with a value that fails, so `expectedValue` must be a subset of `options`
+  // rather than the whole of it (design D5).
+  for (const error of validateVocabulary(input)) {
+    errors.push({ field: error.field, message: error.message });
+  }
   return errors;
 }
 
@@ -109,6 +118,10 @@ const AUDITED_FIELDS = [
   "questionPt",
   "questionEn",
   "type",
+  // `options` is audited separately from `expectedValue` because the
+  // recomputation classifier reads the difference: widening the vocabulary
+  // forces a reprocess, narrowing what passes is a free re-score.
+  "options",
   "expectedValue",
   "weight",
   "blocking",

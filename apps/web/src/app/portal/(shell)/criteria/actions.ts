@@ -29,6 +29,9 @@ function parseCriterionForm(formData: FormData): { input: CriterionInput; id: st
   const typeRaw = String(formData.get("type") ?? "boolean");
   const type: CriterionType = (CRITERION_TYPES as readonly string[]).includes(typeRaw) ? (typeRaw as CriterionType) : "boolean";
   const expected = String(formData.get("expectedValue") ?? "").trim();
+  // The vocabulary only exists for enum criteria; anything else must send null
+  // or validation rejects it (design D5).
+  const options = String(formData.get("options") ?? "").trim();
   return {
     id: String(formData.get("id") ?? "") || null,
     input: {
@@ -37,6 +40,7 @@ function parseCriterionForm(formData: FormData): { input: CriterionInput; id: st
       questionPt: String(formData.get("questionPt") ?? "").trim(),
       questionEn: String(formData.get("questionEn") ?? "").trim(),
       type,
+      options: type === "enum" && options !== "" ? options : null,
       expectedValue: type === "free_text" || expected === "" ? null : expected,
       weight: Number.parseInt(String(formData.get("weight") ?? ""), 10),
       blocking: formData.get("blocking") === "on",

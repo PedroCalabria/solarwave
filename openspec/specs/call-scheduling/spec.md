@@ -1,7 +1,7 @@
 # call-scheduling Specification
 
 ## Purpose
-TBD - created by archiving change persistent-foundations. Update Purpose after archive.
+Decides when a lead may be called: the IANA timezone derived from the phone number's DDD, the 08:00-22:00 local call window, and the retry schedule measured from the actual end of the previous attempt. Pure, I/O-free rules in `@solarwave/core` (spec sections 4.2 and 4.5).
 ## Requirements
 ### Requirement: DDD resolves to an IANA timezone
 The system SHALL map a Brazilian DDD to an IANA timezone, defaulting to `America/Sao_Paulo`, with `America/Cuiaba` for 65 and 66, `America/Campo_Grande` for 67, `America/Manaus` for 92 and 97, `America/Boa_Vista` for 95, `America/Porto_Velho` for 69 and `America/Rio_Branco` for 68.

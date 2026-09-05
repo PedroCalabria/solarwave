@@ -1,0 +1,26 @@
+{
+  "name": "@solarwave/ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Thin, mockable adapters over the Vercel AI SDK for SolarWave's non-realtime model calls.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "3.0.121",
+    "@solarwave/core": "workspace:*",
+    "ai": "^6.0.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5",
+    "vitest": "^4"
+  }
+}
