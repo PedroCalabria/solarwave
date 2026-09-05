@@ -335,8 +335,13 @@ Two bugs of my own, found by this and fixed:
 
 ## 13. End to end, and the write-up
 
-- [ ] 13.1 `pnpm build` before believing anything: it is the only check that exercises the server/client module boundary, and `@solarwave/voice` is a new barrel that a Client Component could reach. Delete `apps/web/.next` first if a previous run left a `TurbopackInternalError`
+- [x] 13.1 `pnpm build` before believing anything: it is the only check that exercises the server/client module boundary, and `@solarwave/voice` is a new barrel that a Client Component could reach. Delete `apps/web/.next` first if a previous run left a `TurbopackInternalError`
+
+Clean build passes with every voice route present: `/api/harness`, `/api/media`,
+`/api/twilio/voice`, `/api/twilio/status`, `/api/internal/call`. `packages/voice`
+keeps `dispatch.ts` behind a subpath, so nothing reaches the postgres driver
+from a Client Component.
 - [ ] 13.2 Place one real call to the verified demo number and confirm the whole chain: dispatch, TwiML, media stream, conversation, status callback, outcome, transcript, extraction, score, narrative, judge, portal
 - [ ] 13.3 Place a deliberate opt-out call and confirm the lead reaches terminal `opt_out`, that the attempt outcome is `opt_out`, and that a re-submission of the intake form does not reschedule that phone
 - [ ] 13.4 Kill the bridge mid-call on purpose and confirm the status callback still closes the attempt, the transcript survives, and the lead is retryable rather than stuck in `calling`
-- [ ] 13.5 Update `README.md` (state of the build, routes, scripts, the local voice development loop) and `openspec/config.yaml` (repository state, the settled open questions, the measured Live model id, sample rates, quotas and the real call budget remaining)
+- [x] 13.5 Update `README.md` (state of the build, routes, scripts, the local voice development loop) and `openspec/config.yaml` (repository state, the settled open questions, the measured Live model id, sample rates, quotas and the real call budget remaining)

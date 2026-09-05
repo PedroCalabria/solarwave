@@ -21,6 +21,7 @@ packages/
   ai/             Thin, mockable adapters over the AI SDK: structured output and conversation turns
   scoring/        The scoring worker: extraction, narrative, guardrail judge, recomputation
   agent/          The conversation agent: call script, tools, loop, question linter, persona eval
+  voice/          The realtime call: Gemini Live session, audio conversion, Twilio dispatch and the voice eval
 openspec/         Decision log (config.yaml) and change proposals, designs, specs and tasks
 ```
 
@@ -144,7 +145,12 @@ publicly reachable and nothing else stands in front of them.
 | `/portal/leads/[id]` | Lead detail: score, criteria-driven answers, attempts, transcript |
 | `/portal/criteria` | Qualification criteria, call order preview and scoring settings (admin edits, agents read) |
 | `/portal/audit` | Criteria and settings audit history |
+| `/portal/harness` | Voice harness: the realtime agent on your microphone (admin only) |
 | `POST /api/leads` | Intake API |
+| `POST /api/internal/call` | Places a real call (shared secret) |
+| `POST /api/twilio/voice` | Call instructions: connects the media stream |
+| `POST /api/twilio/status` | Status callback: closes the attempt and hands it to scoring |
+| `GET /api/media` | Twilio Media Streams ↔ Gemini Live (WebSocket) |
 
 ## Scripts
 
@@ -161,6 +167,7 @@ publicly reachable and nothing else stands in front of them.
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / load demo data (idempotent) |
 | `pnpm eval` | Extraction and guardrail-judge eval against the real model (not in CI) |
 | `pnpm eval:agent` | Conversation agent eval: guardrail probes and persona flows (not in CI) |
+| `pnpm eval:voice` | The same guardrail probes against the realtime voice model, one session each, paced 30s apart (not in CI) |
 
 ## State of the build
 
@@ -207,7 +214,40 @@ Done in the `conversation-agent-text` change:
   scores it. Closes conversation → transcript → extraction → score → narrative →
   judge with no telephony.
 
-Not built yet, in order: the Twilio + Gemini Live voice bridge, and the
-lifecycle workflow that actually places and retries calls. Intake records
-`next_call_at`, but no real call is dispatched — a simulated one is the only way
-to exercise the pipeline end to end today.
+Built in the `voice-bridge` change, and NOT yet proven on a telephone:
+
+- **A realtime session** (`packages/voice`) driving the same assembled script
+  and the same tool contract over Gemini Live: transcript from input and output
+  transcription, a 90-second wrap-up, a 3-minute hard stop, and barge-in. The
+  provider sits behind a one-function interface, so the timers, the transcript
+  and the tool precedence are tested with no network.
+- **A browser microphone harness** at `/portal/harness`, admin-only, writing
+  nothing — no attempt, no lead change, no score. It exists so the Gemini half
+  and the telephony half fail for separable reasons.
+- **Audio conversion**: mu-law and a stateful resampler whose lag is constant
+  rather than drifting, pure and tested without I/O.
+- **Twilio dispatch**, an admin "Call now" action and `POST /api/internal/call`,
+  sharing one `dispatchCall` whose refusals — opt-out, in flight, attempt cap,
+  unreviewed violation, call window, no criteria, not configured — are enforced
+  inside the transaction that reserves the attempt.
+- **The webhooks and the media bridge**: TwiML connecting a bidirectional
+  stream, the status callback as the authority on how an attempt ended, and
+  two-phase attempt persistence keyed by the Twilio call SID. No migration.
+- **A voice pass for the guardrail probes** (`pnpm eval:voice`), running them
+  against the model that actually speaks rather than the text one.
+
+**No real telephone call has been placed yet.** Two things stand in the way, and
+both are written up in `openspec/changes/voice-bridge/tasks.md`:
+
+1. **The realtime session is intermittent** (section 7b). Measured with no audio
+   involved at all: sessions opened in quick succession on the Gemini free tier
+   die with a 1011 or produce nothing, while the same probe run alone answers
+   and holds. It is a free-tier limit rather than the acoustic loop it first
+   looked like, and it is unresolved.
+2. **Twilio has no usable number on the account** as far as its API reports,
+   and no verified caller ID, though the console's own trial panel places calls.
+
+Still not built: the lifecycle workflow that schedules and retries calls
+(`leadWorkflow`), the transcript purge and the Supabase keep-alive crons. Intake
+records `next_call_at`, but nothing dispatches from it — a call is placed only
+by an admin pressing the button.
