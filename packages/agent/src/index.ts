@@ -47,9 +47,18 @@ export {
   type ScriptedPersonaInput,
   type ScriptedRule,
 } from "./personas";
-export {
-  simulateCall,
-  type SimulateCallInput,
-  type SimulateOutcome,
-  type SimulateRefusal,
-} from "./simulate";
+/**
+ * `simulateCall` is NOT exported here, on purpose.
+ *
+ * It is the one module in this package that touches `@solarwave/db`, and
+ * through it the postgres driver. Re-exporting it from the barrel means every
+ * Client Component that imports anything from `@solarwave/agent` drags the
+ * driver into the browser bundle, where `fs`, `net` and `tls` do not resolve
+ * and the build fails — which is exactly what happened the first time this
+ * package was deployed.
+ *
+ * Keeping it behind `@solarwave/agent/simulate` makes the barrel safe by
+ * construction rather than by everyone remembering. Client-safe subpaths:
+ * `@solarwave/agent/criteria` (pure ordering) and `@solarwave/agent/personas`
+ * (the catalogue, no imports at all).
+ */

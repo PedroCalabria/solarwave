@@ -5,7 +5,10 @@
   "type": "module",
   "description": "The conversation agent: the call script assembled from criteria, the tool contract, the conversation loop, the question linter and the persona evaluation suite.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./criteria": "./src/criteria.ts",
+    "./personas": "./src/personaCatalogue.ts",
+    "./simulate": "./src/simulate.ts"
   },
   "scripts": {
     "test": "vitest run",

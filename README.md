@@ -108,6 +108,7 @@ Supabase dashboard (*Project → Restore*) before a demo.
 | --- | --- |
 | `pnpm dev` / `pnpm build` | Next.js app |
 | `pnpm typecheck` / `pnpm lint` | Every workspace |
+| `pnpm build` | Next.js production build — the only check that exercises the server/client module boundary |
 | `pnpm test` | Unit tests in every workspace (web and db integration tests run when `DATABASE_URL` is set) |
 | `pnpm --filter @solarwave/db test:integration` | Database tests through `.env.local` |
 | `pnpm db:generate` | New Drizzle migration from `packages/db/src/schema.ts` |

@@ -1,6 +1,10 @@
 "use client";
 
-import { callOrder, type LintWarning } from "@solarwave/agent";
+// Subpaths, never the barrel, from a Client Component: `criteria` is pure
+// ordering and `LintWarning` is type-only, so neither reaches the browser
+// bundle. See the note in packages/agent/src/index.ts.
+import { callOrder } from "@solarwave/agent/criteria";
+import type { LintWarning } from "@solarwave/agent";
 import { CRITERION_TYPES, type CriterionType, type ScoringSettings } from "@solarwave/core";
 import Link from "next/link";
 import { useActionState, useState, useTransition, type CSSProperties } from "react";

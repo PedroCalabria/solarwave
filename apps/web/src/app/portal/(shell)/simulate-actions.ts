@@ -1,6 +1,7 @@
 "use server";
 
-import { PERSONAS, llmResponder, simulateCall, type PersonaKey } from "@solarwave/agent";
+import { PERSONAS, llmResponder, type PersonaKey } from "@solarwave/agent";
+import { simulateCall } from "@solarwave/agent/simulate";
 import { hasApiKey, modelFor } from "@solarwave/ai";
 import { getDb, getLeadById } from "@solarwave/db";
 import { scoreAttempt } from "@solarwave/scoring";

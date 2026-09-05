@@ -1,6 +1,9 @@
 "use client";
 
-import { PERSONAS, PERSONA_KEYS } from "@solarwave/agent";
+// The subpath, never the barrel: the barrel reaches `simulate.ts` and through
+// it `@solarwave/db` and the postgres driver, which a browser build cannot
+// resolve against `fs`, `net` and `tls`.
+import { PERSONAS, PERSONA_KEYS } from "@solarwave/agent/personas";
 import { useActionState, useState, type CSSProperties } from "react";
 import { simulateCallAction } from "@/app/portal/(shell)/simulate-actions";
 import { PillButton } from "@/components/ds/soltera";

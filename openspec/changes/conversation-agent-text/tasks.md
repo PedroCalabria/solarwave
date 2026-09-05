@@ -65,5 +65,6 @@
 
 - [x] 9.1 Confirm `pnpm test` passes with no API key configured, proving CI stays mocked and free (design D8)
 - [x] 9.2 Run `pnpm typecheck` and `pnpm lint` across the workspace
+- [x] 9.2b Run `pnpm build`. Added after the fact: typecheck, lint and tests all passed while the production build failed, because only the build exercises the server/client module boundary. A Client Component imported the `@solarwave/agent` barrel, which re-exported `simulate.ts`, which pulls `@solarwave/db` and the postgres driver into the browser bundle. Fixed by keeping the database-touching module behind `@solarwave/agent/simulate` and giving clients the pure `./criteria` and `./personas` subpaths
 - [x] 9.3 Update the README: the new package in the layout, the `eval:agent` and simulate entries in the scripts table, and the state-of-the-build section
 - [x] 9.4 Update `openspec/config.yaml`: repository state, the settled decisions of this change, and the note that `request_callback` captures a time while the scheduling policy stays open for change 5

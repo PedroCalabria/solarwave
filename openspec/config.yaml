@@ -222,6 +222,18 @@ context: |
     upgrade before the demo.
 
   ## Conventions
+  - VERIFY WITH `pnpm build`, not just typecheck/lint/test. Only the build
+    exercises the server/client module boundary. Learned in change 3: a Client
+    Component imported the `@solarwave/agent` barrel, which re-exported the one
+    module touching `@solarwave/db`, and the postgres driver landed in the
+    browser bundle where `fs`/`net`/`tls` do not resolve. Every other check was
+    green. If the build reports a TurbopackInternalError after a failed run,
+    delete `apps/web/.next` before believing it.
+  - A package barrel (`index.ts`) must stay client-safe. Anything importing
+    `@solarwave/db`, a driver or a node builtin goes behind an explicit subpath
+    export instead, so a Client Component cannot reach it by accident:
+    `@solarwave/agent/simulate` is server-only; `./criteria` and `./personas`
+    are pure and client-safe.
   - TypeScript everywhere, pnpm workspaces, Drizzle, Vitest for `packages/*`.
   - Conventional commits (feat:, fix:, chore:, ...).
   - Next.js 16 has breaking changes vs. training data: read
