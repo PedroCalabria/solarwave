@@ -104,6 +104,32 @@ context: |
     curl -H "x-goog-api-key: $GOOGLE_GENERATIVE_AI_API_KEY"       "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"
   - Both halves of the product now use the same provider and key: text through
     @ai-sdk/google, realtime audio through @google/genai.
+  - MEASURED 2026-09-05 (voice-bridge spike, `packages/voice/src/spike/live.ts`,
+    @google/genai 1.52.0), and it overrides the paragraph above: PIN
+    `gemini-2.5-flash-native-audio-preview-09-2025`. It is the ONLY native-audio
+    id on the free key where function calling works. The newer
+    `preview-12-2025` produces audio and transcription correctly and then kills
+    the socket with 1011 "Internal error occurred" the moment the model tries to
+    call a function — reproduced with all five tools and with one minimal tool,
+    so it is the model and not our declarations. `-latest` currently aliases
+    12-2025 and is therefore broken too: never use the floating alias.
+  - MEASURED: output audio is `audio/pcm;rate=24000`, mono PCM16, matching the
+    24 kHz the architecture section assumed. Output transcription arrives in
+    Portuguese without extra configuration. Input transcription is untested
+    until the browser harness supplies real speech.
+  - MEASURED: `toFunctionDeclarations()` is accepted AS IS. The `$schema` and
+    `additionalProperties` keys that `z.toJSONSchema()` emits do not need
+    stripping, so change 3's projection needs no change. Sanitizing them was
+    tried and was not what fixed anything.
+  - MEASURED, and the loop must tolerate it: the model omits required
+    arguments. `record_answer` arrived with `criterion_key` and no `value`;
+    `end_call` arrived with no `reason`. `readAnswer` and `readReason` in
+    `loop.ts` already default rather than guess, which is why this is a note
+    and not a bug.
+  - MEASURED: pushing `sendClientContent` while the model is still generating
+    also produces a 1011. On a real call, lead audio goes through
+    `sendRealtimeInput`, which is built for that; client content is only for
+    injected instructions such as the wrap-up, and must wait for `turnComplete`.
   - Transcripts come from Gemini Live input/output transcription. Call audio is
     never stored (spec section 10).
 

@@ -3,9 +3,29 @@
 Sections 1 to 3 answer questions whose answers change the shape of the change.
 Nothing below section 4 should start until they have.
 
-- [ ] 1.1 List the models the free Google AI Studio key can reach (`curl -H "x-goog-api-key: $GOOGLE_GENERATIVE_AI_API_KEY" "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"`) and identify the native-audio Live model. Record the exact id and its stated input/output sample rates in the decision log; do not trust the ids or rates written there today (design D12)
-- [ ] 1.2 Open a Live session with `@google/genai` from a throwaway script: send a few seconds of PCM, and confirm you get back audio, input transcription, output transcription and one function call from a single declared tool. Record what the free tier actually permits — session length, concurrency, per-minute and per-day caps — and what an exhausted quota looks like on the wire
-- [ ] 1.3 STOP CONDITION: if native audio is not reachable on the free tier, stop and record the options (paid tier, or a cascade of realtime text plus TTS) rather than building against an assumption. This is the one task whose failure invalidates the design
+- [x] 1.1 List the models the free Google AI Studio key can reach (`curl -H "x-goog-api-key: $GOOGLE_GENERATIVE_AI_API_KEY" "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200"`) and identify the native-audio Live model. Record the exact id and its stated input/output sample rates in the decision log; do not trust the ids or rates written there today (design D12)
+- [x] 1.2 Open a Live session with `@google/genai` from a throwaway script: send a few seconds of PCM, and confirm you get back audio, input transcription, output transcription and one function call from a single declared tool. Record what the free tier actually permits — session length, concurrency, per-minute and per-day caps — and what an exhausted quota looks like on the wire
+- [x] 1.3 STOP CONDITION: if native audio is not reachable on the free tier, stop and record the options (paid tier, or a cascade of realtime text plus TTS) rather than building against an assumption. This is the one task whose failure invalidates the design
+
+MEASURED 2026-09-05 (`packages/voice/src/spike/live.ts`, @google/genai 1.52.0).
+The stop condition did NOT fire — native audio is reachable on the free key —
+but the spike found a trap the design would otherwise have walked into:
+
+- PIN `gemini-2.5-flash-native-audio-preview-09-2025`. Function calling works,
+  the session closes 1000, and `record_answer` and `end_call` both fired.
+- `preview-12-2025` is BROKEN for tools: correct audio and transcription, then
+  a 1011 "Internal error occurred" the instant the model calls a function.
+  Reproduced with five tools and with one minimal tool, so the fault is the
+  model, not our declarations. `-latest` aliases it and is broken too.
+- Output audio is `audio/pcm;rate=24000` mono PCM16, as the design assumed.
+- `toFunctionDeclarations()` is accepted unchanged; `$schema` and
+  `additionalProperties` need no stripping.
+- The model omits required arguments (`record_answer` with no `value`,
+  `end_call` with no `reason`), which `loop.ts` already defaults rather than
+  guesses. Section 6 must keep that tolerance.
+- `sendClientContent` during generation also yields 1011: the wrap-up injection
+  in task 6.4 must wait for `turnComplete`.
+- Input-audio transcription is still unverified; it needs real speech (task 7).
 
 ## 2. Spike — the Vercel WebSocket beta on this project
 
