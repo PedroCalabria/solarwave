@@ -34,6 +34,11 @@ context: |
     Twilio, the transcript purge and keep-alive crons. `workflow_run_id` exists
     as a column with nothing writing it. A simulated call is the only way to
     exercise the pipeline end to end today.
+  - Changes 1-3 are archived; the spec baseline is 16 capabilities under
+    `openspec/specs/`. Change 4 (`voice-bridge`) is proposed and gated on three
+    spikes: the Gemini Live native-audio model id and free-tier reach, the
+    Vercel WebSocket beta on this project, and what a Twilio trial can actually
+    dial in Brazil. Each has a stop condition in its tasks.
   - Demo transcripts and their hand-written expected answers live in
     `packages/db/src/seed/data.ts`, exported as the golden set through
     `@solarwave/scoring`. `apps/web/src/lib/leads.ts` is presentation helpers
@@ -199,8 +204,13 @@ context: |
      linter, the persona eval (probes + scripted flows, ~39 requests), and
      simulated calls persisted as real attempts. `packages/agent` was added
      here. No migration.
-  4. voice-bridge — Twilio webhooks, Media Streams WS, Gemini Live, resample,
-     barge-in, transcript capture, 90 s / 3 min timers, AMD, status callbacks.
+  4. voice-bridge — PROPOSED. Twilio webhooks, Media Streams WS, Gemini Live,
+     resample, barge-in, transcript capture, 90 s / 3 min timers, AMD, status
+     callbacks. Shaped as two halves that fail for separable reasons: the
+     realtime session, verified from a browser-microphone harness with zero
+     telephony, and the Twilio transport on top of it. `packages/voice` is added
+     here, holding the session and the audio conversion so the Fly.io fallback
+     swaps only the host. No migration.
   5. lifecycle-and-operations — leadWorkflow (sleep/hook/retry/window),
      callback-requested handling, no_answer_final, transcript purge cron,
      Supabase keep-alive cron, cost per call, realtime dashboard.
@@ -215,11 +225,35 @@ context: |
     preview of the real call order so the two cannot silently disagree.
   - SETTLED by conversation-agent-text: the hostile-exit budget is 2 turns after
     the first hostile utterance, measured rather than invented (`EVAL_HOSTILE_TURNS`).
-  - Callback-requested: STILL OPEN. `request_callback` now captures the time the
-    lead asked for, and the loop maps that call to `answered_incomplete`; whether
-    that time overrides the fixed 15 m / 2 d policy belongs to change 5.
+  - SETTLED by voice-bridge (design D4): the Twilio STATUS CALLBACK is
+    authoritative for how an attempt ended, not the media WebSocket. The bridge
+    persists its transcript incrementally and publishes what it knows; the
+    callback writes `ended_at`, the outcome and the transition, and
+    `reconcileStaleAttempts` is the backstop. The alternative left leads stuck
+    in `calling` with a null `ended_at`, which `attempt_in_flight` then reads as
+    a running call and refuses every future attempt, silently and forever.
+  - SETTLED by voice-bridge (design D3): the end-reason-to-outcome mapping and
+    the live-answer bookkeeping live in ONE transport-neutral module in
+    `@solarwave/agent`, used by the text loop and the voice session.
+    `outcomeFor` was private to `loop.ts`; a second copy in the bridge would
+    have made a text call and a voice call that ended the same way retry
+    differently.
+  - SETTLED by voice-bridge (design D5): before `leadWorkflow` exists, a call is
+    triggered by an admin action on the lead detail and by a secret-guarded
+    `POST /api/internal/call`, sharing one `dispatchCall`. Opt-out, in-flight
+    and attempt-cap are refused INSIDE the transaction that inserts the attempt,
+    because losing that race places a telephone call that cannot be recalled.
+  - Callback-requested: STILL OPEN. `request_callback` captures the time the
+    lead asked for, and both the text loop and the voice session map that call
+    to `answered_incomplete`; there is still no column for it. `scheduleRetry`
+    already accepts an explicit requested time, so change 5 needs a column and a
+    policy decision, not new agent work.
   - Whether the Twilio trial announcement/verification limits force a paid
-    upgrade before the demo.
+    upgrade before the demo: STILL OPEN, and answered by voice-bridge task 3.
+    Trial numbers are limited to the sign-up country and Brazilian local numbers
+    need a regulatory bundle, so the answer may be "demo on the harness". The
+    announcement itself plays before the AI disclosure; the disclosure is still
+    the agent's first utterance, so the guardrail holds as specified.
 
   ## Conventions
   - VERIFY WITH `pnpm build`, not just typecheck/lint/test. Only the build
