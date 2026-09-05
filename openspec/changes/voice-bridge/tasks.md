@@ -198,11 +198,62 @@ produced (design D8).
   first time: task 1.2 sent text, so the lead half of the transcript has never
   been exercised against real speech.
 
+## 7b. OPEN — the live session is intermittent over a microphone
+
+Deferred by the project owner on 2026-09-05, not solved. Recorded here because
+it is the single biggest risk to task 13: a real call cannot be debugged for
+free, and this reproduces for free.
+
+Symptoms, from three harness sessions:
+
+- The agent sometimes does not react to speech at all — no reply, no lead
+  transcription.
+- Audio sometimes sticks or arrives broken.
+- One session died at 121 s with `1011 INTERNAL ERROR OCCURRED` from the model.
+- One transcript showed a duplicated, interrupted agent turn
+  (`O imóvel é seuO imóvel é seu`).
+
+Already fixed, and it still happens:
+
+- Text frames were classified as audio, so the JSON `stop` message was fed to
+  the model as PCM and the end-call button did nothing.
+- Capture posted every 128-sample render quantum: ~125 realtime API calls a
+  second, against telephony's 50. Now 40 ms frames.
+- Voice-activity detection was at its defaults; now 700 ms silence, high
+  sensitivity, interrupt-on-activity.
+- Playback had no scheduling headroom; now 120 ms.
+
+Still unexplained, in order of suspicion:
+
+1. **Acoustic echo.** On speakers the microphone hears the agent, and since the
+   lead speaking is what interrupts it, the agent interrupts itself. The page
+   now says to wear headphones. Reported as still intermittent WITH the fixes,
+   but whether headphones were worn on that run is unconfirmed.
+2. **The wrap-up injection at 90 s.** Task 1.2 measured that client content sent
+   while the model is generating kills the socket with a 1011. The session
+   guards on a `generating` flag derived from provider events; if those events
+   are disordered under load the guard is wrong. The 121 s death is consistent
+   with this.
+3. **Free-tier realtime throttling.** Unmeasured. The quota behaviour of a long
+   audio session was never established — task 1.2 only ran short text turns.
+
+- [ ] 7b.1 Establish whether the intermittency survives headphones, in a quiet
+  room, with the 40 ms frames. This separates an acoustic loop from a bridge bug
+  and costs nothing
+- [ ] 7b.2 Log every provider event with a timestamp behind a debug flag, so the
+  order of `interrupted`, `turn_complete` and `audio` around a stall is visible
+  rather than inferred
+- [ ] 7b.3 Run the session with the wrap-up disabled (`VOICE_WRAP_UP_SECONDS`
+  beyond the hard stop) and see whether a call survives past 121 s. If it does,
+  suspicion 2 is confirmed and the injection needs a different trigger
+- [ ] 7b.4 BLOCKS task 13.2. A real call inherits every one of these, and the
+  Twilio allowance is 75 minutes
+
 ## 8. Attempt persistence for a real call
 
-- [ ] 8.1 Implement `createDispatchedAttempt` in `packages/db`: inside one transaction, read the lead `FOR UPDATE`, refuse `opted_out`, `attempt_in_flight` and `attempt_cap_reached`, reserve the attempt number, insert the row with `started_at` and `scoring_status = 'pending'`, and apply the `dispatch` transition (design D5, D6)
-- [ ] 8.2 Implement `attachCallSid`, `findAttemptByCallSid` and `persistLiveTranscript` (throttled, last write wins on one row)
-- [ ] 8.3 Implement `finishAttempt`: idempotent by call SID, sets `ended_at`, `outcome`, `ended_reason` and `transcript_expires_at` at twelve months, and applies the lifecycle transition — never inventing a qualification decision, which only scoring may produce
+- [x] 8.1 Implement `createDispatchedAttempt` in `packages/db`: inside one transaction, read the lead `FOR UPDATE`, refuse `opted_out`, `attempt_in_flight` and `attempt_cap_reached`, reserve the attempt number, insert the row with `started_at` and `scoring_status = 'pending'`, and apply the `dispatch` transition (design D5, D6)
+- [x] 8.2 Implement `attachCallSid`, `findAttemptByCallSid` and `persistLiveTranscript` (throttled, last write wins on one row)
+- [x] 8.3 Implement `finishAttempt`: idempotent by call SID, sets `ended_at`, `outcome`, `ended_reason` and `transcript_expires_at` at twelve months, and applies the lifecycle transition — never inventing a qualification decision, which only scoring may produce
 - [x] 8.4 Implement `reconcileStaleAttempts(olderThan)`: close attempts open past the hard stop plus a margin as `answered_incomplete` with the retry transition (design D6)
 - [x] 8.5 Integration-test all of it on the PGlite harness: the concurrent-dispatch race yields exactly one attempt, a repeated `finishAttempt` for one SID transitions once, and reconciliation leaves an in-budget attempt alone
 
@@ -220,7 +271,7 @@ produced (design D8).
 - [x] 10.3 Persist the accumulated transcript from the bridge as the call proceeds, throttled, so a bridge that dies does not take the conversation with it (design D4)
 - [x] 10.4 Implement `POST /api/twilio/status`: verify the signature, resolve the outcome from `CallStatus` and `AnsweredBy` through a pure mapping function, close the attempt idempotently, and hand it to `scoreAttempt`
 - [x] 10.5 Unit-test the status mapping with no network: unanswered, busy, failed, each machine-detection value, `unknown` treated as human, and an answered call taking the session's resolved outcome
-- [ ] 10.6 Unit-test that an invalid signature on either webhook closes no attempt, writes no transcript and triggers no scoring
+- [x] 10.6 Unit-test that an invalid signature on either webhook closes no attempt, writes no transcript and triggers no scoring
 
 CHANGED by design D13: Twilio's signature cannot be the lock, because it is
 computed with the account auth token and this project authenticates with an API
