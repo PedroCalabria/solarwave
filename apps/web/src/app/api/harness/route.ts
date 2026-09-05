@@ -76,11 +76,23 @@ async function run(ws: WebSocket, criteria: ScriptCriterion[], language: "pt" | 
             send({ type: "tool", name: event.name, input: event.input });
             break;
           case "ended":
+            // Logged as well as sent: when the provider kills a session the
+            // browser is not always still there to show why.
+            console.log("[harness] session ended", {
+              stoppedBy: event.result.stoppedBy,
+              seconds: event.result.durationSeconds,
+              endedReason: event.result.endedReason,
+              transportClose: event.result.transportClose,
+              transportError: event.result.transportError,
+            });
             send({
               type: "ended",
               endedReason: event.result.endedReason,
               outcome: event.result.outcome,
               cutOff: event.result.cutOff,
+              stoppedBy: event.result.stoppedBy,
+              transportClose: event.result.transportClose,
+              transportError: event.result.transportError,
               durationSeconds: event.result.durationSeconds,
               liveAnswers: event.result.liveAnswers,
               // Said plainly on the page, so nobody mistakes a rehearsal for a

@@ -27,8 +27,21 @@ type Ended = {
   endedReason: string;
   outcome: string;
   cutOff: boolean;
+  stoppedBy: string;
+  transportClose?: { code?: number; reason?: string };
+  transportError?: string;
   durationSeconds: number;
   liveAnswers: { criterionKey: string; value: string }[];
+};
+
+/** Plain English for the thing that ended the call. */
+const STOPPED_BY: Record<string, string> = {
+  agent: "the agent, with end_call",
+  hard_stop: "the hard stop",
+  wrap_up_budget: "the wrap-up budget",
+  transport_closed: "the model closed the socket",
+  transport_error: "the model socket errored",
+  hung_up: "you, from this page",
 };
 
 type Status = "idle" | "connecting" | "live" | "ended" | "error";
@@ -259,7 +272,21 @@ export function VoiceHarness() {
             <dt style={{ color: "var(--text-muted)" }}>would map to</dt>
             <dd>{ended.outcome}</dd>
             <dt style={{ color: "var(--text-muted)" }}>stopped by</dt>
-            <dd>{ended.cutOff ? "a timer" : "the agent"}</dd>
+            <dd>{STOPPED_BY[ended.stoppedBy] ?? ended.stoppedBy}</dd>
+            {ended.transportClose ? (
+              <>
+                <dt style={{ color: "var(--text-muted)" }}>close</dt>
+                <dd className={styles.mono}>
+                  {ended.transportClose.code ?? "?"} {ended.transportClose.reason || "(no reason given)"}
+                </dd>
+              </>
+            ) : null}
+            {ended.transportError ? (
+              <>
+                <dt style={{ color: "var(--text-muted)" }}>error</dt>
+                <dd className={styles.mono}>{ended.transportError}</dd>
+              </>
+            ) : null}
             <dt style={{ color: "var(--text-muted)" }}>duration</dt>
             <dd>{ended.durationSeconds}s</dd>
             <dt style={{ color: "var(--text-muted)" }}>answers</dt>

@@ -62,9 +62,19 @@ export type VoiceCallResult = {
   optedOut: boolean;
   minorFlagged: boolean;
   requestedCallback: string | null;
-  /** True when a timer stopped the call rather than the agent. */
+  /** True when something other than the agent stopped the call. */
   cutOff: boolean;
   durationSeconds: number;
+  /**
+   * WHAT stopped it, when the agent did not. Without this a socket the provider
+   * killed is indistinguishable from a budget timer, and the first real harness
+   * session reported "a timer" for a session that died at thirteen seconds.
+   */
+  stoppedBy: "agent" | "wrap_up_budget" | "hard_stop" | "transport_closed" | "transport_error" | "hung_up";
+  /** The provider's close code and reason, when it closed the socket. */
+  transportClose?: { code?: number; reason?: string };
+  /** The provider's error text, when it errored. */
+  transportError?: string;
 };
 
 export type StartVoiceSessionInput = {
@@ -162,7 +172,12 @@ export async function startVoiceSession({
 
   const emitTranscript = () => onEvent({ type: "transcript", turns: transcript.snapshot() });
 
-  const finish = (reason: EndCallReason, cutOff: boolean) => {
+  const finish = (
+    reason: EndCallReason,
+    cutOff: boolean,
+    stoppedBy: VoiceCallResult["stoppedBy"],
+    diagnostics: { transportClose?: { code?: number; reason?: string }; transportError?: string } = {},
+  ) => {
     if (ended) return;
     ended = true;
     clearTimeout(wrapUpTimer);
@@ -181,6 +196,8 @@ export async function startVoiceSession({
         requestedCallback: state.requestedCallback,
         cutOff,
         durationSeconds: Math.round((Date.now() - startedAt) / 1000),
+        stoppedBy,
+        ...diagnostics,
       },
     });
   };
@@ -237,7 +254,7 @@ export async function startVoiceSession({
         if (terminal) {
           // The agent still has to say goodbye, so the call is not cut here.
           // `end_call` is its last action, and the provider closes after it.
-          finish(terminal, false);
+          finish(terminal, false, "agent");
         }
         break;
       }
@@ -252,12 +269,19 @@ export async function startVoiceSession({
 
       case "error":
         // The transport is gone; the outcome is whatever the call had earned.
-        finish(state.reasonWhenCutOff(), true);
+        finish(state.reasonWhenCutOff(), true, "transport_error", { transportError: event.message });
         break;
 
-      case "closed":
-        finish(state.terminalReason() ?? state.reasonWhenCutOff(), state.terminalReason() === null);
+      case "closed": {
+        const terminal = state.terminalReason();
+        finish(
+          terminal ?? state.reasonWhenCutOff(),
+          terminal === null,
+          terminal === null ? "transport_closed" : "agent",
+          { transportClose: { code: event.code, reason: event.reason } },
+        );
         break;
+      }
 
       case "setup_complete":
         // `connect` may resolve after the provider's first messages arrive, so
@@ -284,14 +308,18 @@ export async function startVoiceSession({
   }
 
   wrapUpTimer = setTimeout(requestWrapUp, wrapUpSeconds * 1000);
-  hardStopTimer = setTimeout(() => finish(state.reasonWhenCutOff(), true), maxCallSeconds * 1000);
+  hardStopTimer = setTimeout(() => finish(state.reasonWhenCutOff(), true, "hard_stop"), maxCallSeconds * 1000);
 
   return {
     sendAudio(pcm) {
       if (!ended) connection?.sendAudio(pcm, inputRate);
     },
     stop(reason) {
-      finish(reason ?? state.terminalReason() ?? state.reasonWhenCutOff(), reason === undefined);
+      finish(
+        reason ?? state.terminalReason() ?? state.reasonWhenCutOff(),
+        reason === undefined,
+        reason === undefined ? "hung_up" : "agent",
+      );
     },
     get transcript() {
       return transcript.snapshot();
