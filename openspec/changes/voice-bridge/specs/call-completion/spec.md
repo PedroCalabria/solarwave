@@ -16,15 +16,32 @@ running any further code.
 - **WHEN** the status callback reports a call whose media stream never connected
 - **THEN** the attempt is still closed, with a retryable outcome, and the lead is not left in `calling`
 
-### Requirement: The callback is signature-verified before it is trusted
-The status callback endpoint and the call-instruction endpoint SHALL verify the
-provider's request signature before reading the request. A request that fails
-verification SHALL be rejected without closing an attempt, writing a transcript
-or triggering scoring.
+### Requirement: The webhooks are authenticated before they are trusted
+The status callback endpoint and the call-instruction endpoint SHALL authenticate
+every request before acting on it. Authentication SHALL NOT depend on the
+provider's request signature alone, because that signature is computed with the
+account auth token and this system authenticates with an API key which cannot
+verify one. Each webhook URL SHALL therefore carry a token, signed by this
+system and bound to the specific call attempt, minted when the call is placed.
+The provider's signature SHALL additionally be verified whenever an account auth
+token is configured. A request that fails any configured check SHALL be rejected
+without closing an attempt, writing a transcript or triggering scoring.
 
 #### Scenario: A forged callback changes nothing
-- **WHEN** a request arrives at the status callback endpoint with an invalid signature
+- **WHEN** a request arrives at the status callback endpoint with no token or an invalid one
 - **THEN** it is rejected, no attempt is modified, and no scoring runs
+
+#### Scenario: A token minted for another attempt is refused
+- **WHEN** a request carries a validly signed token bound to a different attempt
+- **THEN** it is rejected
+
+#### Scenario: An expired token is refused
+- **WHEN** a request carries a token whose expiry has passed
+- **THEN** it is rejected
+
+#### Scenario: The provider signature is checked when it can be
+- **WHEN** an account auth token is configured and a request carries a valid token but an invalid provider signature
+- **THEN** it is rejected
 
 ### Requirement: Call status and machine detection resolve to an attempt outcome
 The system SHALL map the provider's reported call status and answering-machine

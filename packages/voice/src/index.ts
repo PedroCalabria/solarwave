@@ -22,6 +22,28 @@ export {
   type VoiceSessionEvent,
 } from "./session";
 export {
+  DEFAULT_MAX_CALL_SECONDS as CONFIG_DEFAULT_MAX_CALL_SECONDS,
+  DEFAULT_WRAP_UP_SECONDS as CONFIG_DEFAULT_WRAP_UP_SECONDS,
+  hasVoiceConfig,
+  readVoiceConfig,
+  type TwilioConfig,
+  type VoiceConfig,
+} from "./config";
+export {
+  isMachine,
+  resolveAttemptOutcome,
+  type ResolveOutcomeInput,
+  type TwilioAnsweredBy,
+  type TwilioCallStatus,
+} from "./outcome";
+export {
+  mintCallToken,
+  validateTwilioSignature,
+  verifyCallToken,
+  type CallTokenFailure,
+} from "./callToken";
+export { connectStreamTwiml, hangUpTwiml, type ConnectStreamInput } from "./twiml";
+export {
   geminiTransport,
   type LiveConnectOptions,
   type LiveConnection,

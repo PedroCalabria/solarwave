@@ -12,4 +12,5 @@ export * from "./queries/transitions";
 export * from "./queries/intake";
 export * from "./queries/rateLimit";
 export * from "./queries/attempts";
+export * from "./queries/realAttempts";
 export * from "./queries/violations";

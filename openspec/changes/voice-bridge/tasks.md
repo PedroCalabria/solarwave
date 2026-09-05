@@ -203,31 +203,38 @@ produced (design D8).
 - [ ] 8.1 Implement `createDispatchedAttempt` in `packages/db`: inside one transaction, read the lead `FOR UPDATE`, refuse `opted_out`, `attempt_in_flight` and `attempt_cap_reached`, reserve the attempt number, insert the row with `started_at` and `scoring_status = 'pending'`, and apply the `dispatch` transition (design D5, D6)
 - [ ] 8.2 Implement `attachCallSid`, `findAttemptByCallSid` and `persistLiveTranscript` (throttled, last write wins on one row)
 - [ ] 8.3 Implement `finishAttempt`: idempotent by call SID, sets `ended_at`, `outcome`, `ended_reason` and `transcript_expires_at` at twelve months, and applies the lifecycle transition — never inventing a qualification decision, which only scoring may produce
-- [ ] 8.4 Implement `reconcileStaleAttempts(olderThan)`: close attempts open past the hard stop plus a margin as `answered_incomplete` with the retry transition (design D6)
-- [ ] 8.5 Integration-test all of it on the PGlite harness: the concurrent-dispatch race yields exactly one attempt, a repeated `finishAttempt` for one SID transitions once, and reconciliation leaves an in-budget attempt alone
+- [x] 8.4 Implement `reconcileStaleAttempts(olderThan)`: close attempts open past the hard stop plus a margin as `answered_incomplete` with the retry transition (design D6)
+- [x] 8.5 Integration-test all of it on the PGlite harness: the concurrent-dispatch race yields exactly one attempt, a repeated `finishAttempt` for one SID transitions once, and reconciliation leaves an in-budget attempt alone
 
 ## 9. Dispatch
 
-- [ ] 9.1 Implement `dispatchCall` in `packages/voice` behind a server-only subpath: run the preconditions, create the attempt, place the Twilio call with asynchronous machine detection, the instruction URL, the status callback URL and a provider duration limit at least as long as the hard stop, then attach the SID (design D5, D9)
-- [ ] 9.2 On a provider error, close the attempt as `failed` and apply the retry transition in the same request, so a Twilio outage costs a retry rather than a lead stuck in `calling`
-- [ ] 9.3 Add `POST /api/internal/call` guarded by `CALL_WORKER_SECRET`, rejecting an unauthorised request before reading the body — the shape `POST /api/internal/score` already uses
-- [ ] 9.4 Add the admin server action mirroring `simulateCallAction`, and unit-test every refusal reason end to end from the action
+- [x] 9.1 Implement `dispatchCall` in `packages/voice` behind a server-only subpath: run the preconditions, create the attempt, place the Twilio call with asynchronous machine detection, the instruction URL, the status callback URL and a provider duration limit at least as long as the hard stop, then attach the SID (design D5, D9)
+- [x] 9.2 On a provider error, close the attempt as `failed` and apply the retry transition in the same request, so a Twilio outage costs a retry rather than a lead stuck in `calling`
+- [x] 9.3 Add `POST /api/internal/call` guarded by `CALL_WORKER_SECRET`, rejecting an unauthorised request before reading the body — the shape `POST /api/internal/score` already uses
+- [x] 9.4 Add the admin server action mirroring `simulateCallAction`, and unit-test every refusal reason end to end from the action
 
 ## 10. TwiML, the status callback and the media bridge
 
-- [ ] 10.1 Implement `POST /api/twilio/voice`: verify `X-Twilio-Signature`, mint a short-lived token bound to the call SID, and return TwiML connecting a `<Stream>` to the media route carrying that token as a parameter (design D10)
-- [ ] 10.2 Implement `GET /api/media`: verify the token and its SID binding before opening anything, then bridge Twilio media frames to the session through the converters from section 5, sending a `clear` on interruption
-- [ ] 10.3 Persist the accumulated transcript from the bridge as the call proceeds, throttled, so a bridge that dies does not take the conversation with it (design D4)
-- [ ] 10.4 Implement `POST /api/twilio/status`: verify the signature, resolve the outcome from `CallStatus` and `AnsweredBy` through a pure mapping function, close the attempt idempotently, and hand it to `scoreAttempt`
-- [ ] 10.5 Unit-test the status mapping with no network: unanswered, busy, failed, each machine-detection value, `unknown` treated as human, and an answered call taking the session's resolved outcome
+- [x] 10.1 Implement `POST /api/twilio/voice`: verify `X-Twilio-Signature`, mint a short-lived token bound to the call SID, and return TwiML connecting a `<Stream>` to the media route carrying that token as a parameter (design D10)
+- [x] 10.2 Implement `GET /api/media`: verify the token and its SID binding before opening anything, then bridge Twilio media frames to the session through the converters from section 5, sending a `clear` on interruption
+- [x] 10.3 Persist the accumulated transcript from the bridge as the call proceeds, throttled, so a bridge that dies does not take the conversation with it (design D4)
+- [x] 10.4 Implement `POST /api/twilio/status`: verify the signature, resolve the outcome from `CallStatus` and `AnsweredBy` through a pure mapping function, close the attempt idempotently, and hand it to `scoreAttempt`
+- [x] 10.5 Unit-test the status mapping with no network: unanswered, busy, failed, each machine-detection value, `unknown` treated as human, and an answered call taking the session's resolved outcome
 - [ ] 10.6 Unit-test that an invalid signature on either webhook closes no attempt, writes no transcript and triggers no scoring
+
+CHANGED by design D13: Twilio's signature cannot be the lock, because it is
+computed with the account auth token and this project authenticates with an API
+key. The webhook URLs carry a token of our own instead, bound to the attempt and
+minted at dispatch, with the provider signature layered on when an auth token is
+also configured. The token is unit-tested; the route-level rejection test is
+what 10.6 still owes.
 
 ## 11. The voice frame and the portal
 
 - [x] 11.1 Add the `medium` input to `buildCallScript`, defaulting to `text`, and write the voice speech section into the existing fixed frame in `frame.ts` — no second prompt builder (design D7)
 - [x] 11.2 Unit-test that text assembly is byte-identical to before, that both media carry every section 6 guardrail and the same question list, and that the voice frame orders the AI disclosure before the first question
-- [ ] 11.3 Add the real-call action to the lead detail: admin-only, visibly distinct from the simulated action, stating that it dials a real number, with a specific message for each refusal reason and a link to the violations view for `blocked_by_violation`
-- [ ] 11.4 Label attempts by kind wherever they are listed, showing the provider call identifier on a real attempt, and show a lead with an attempt in flight as in progress with no second call action
+- [x] 11.3 Add the real-call action to the lead detail: admin-only, visibly distinct from the simulated action, stating that it dials a real number, with a specific message for each refusal reason and a link to the violations view for `blocked_by_violation`
+- [x] 11.4 Label attempts by kind wherever they are listed, showing the provider call identifier on a real attempt, and show a lead with an attempt in flight as in progress with no second call action
 
 ## 12. The voice evaluation pass
 

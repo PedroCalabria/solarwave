@@ -284,6 +284,32 @@ The same spike records the actual input and output sample rates rather than
 trusting the decision log's 16 kHz / 24 kHz, because D11's resampler is written
 against whatever it reports.
 
+### D13 — The webhooks are locked by a token we mint, not only by Twilio's signature
+
+D10 said the webhooks would be verified by `X-Twilio-Signature`. They cannot be,
+on their own: Twilio computes that signature with the account AUTH TOKEN, and
+this project authenticates with an API key so a deployment credential can be
+revoked without locking the account out. There is no API-key variant of the
+signature.
+
+Leaving the endpoints unverified was never an option — in production they are
+publicly reachable (task 2.5), and they close attempts, write transcripts and
+trigger scoring.
+
+So the lock moves to something we control. `dispatchCall` builds the instruction
+and status-callback URLs itself, so each carries a token signed with
+`CALL_WORKER_SECRET` and bound to the attempt id — the same mechanism the media
+socket already needed, for the same reason. Signature validation is layered on
+top whenever `TWILIO_AUTH_TOKEN` happens to be configured, because it proves
+something the token does not: that the request really came from Twilio.
+
+Alternatives considered: requiring the auth token outright, which trades the
+revocability the API key was chosen for; and accepting Twilio's signature alone,
+which is not available. The trade-off taken is that the token appears in the URL
+and therefore in Twilio's request logs. That is the property of any bearer
+credential in a callback URL, it is scoped to one attempt, and it expires in an
+hour.
+
 ## Risks / Trade-offs
 
 - **The Vercel WebSocket beta may not support this shape at all.** RESOLVED
