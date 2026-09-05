@@ -115,7 +115,14 @@ the account auth token (a deployment credential that can be revoked on its own):
   regulatory address the design flagged as a risk, confirmed.
 - US local numbers carry `address_requirements=none`, so they need no bundle.
 
-The wall is the balance, not the country: nothing can be bought at 0.00 USD.
+CORRECTED from the Twilio console: the 0.00 USD balance is not a missing
+credit. The trial no longer grants a dollar balance at all — it grants free
+units per product, and this account has **75 free voice minutes over 30 days**,
+which is exactly what the decision log assumed (~35 two-minute calls).
+
+So the remaining blocker is narrower than the balance suggested: free minutes
+do not dial on their own. The account still needs a phone number to call FROM
+and a verified caller ID to call TO, both from the console.
 
 - [ ] 3.2 Verify the demo destination number and place one manual test call from the console. Confirm the trial announcement's presence and length, and record how much of the two-minute budget it costs
 - [ ] 3.3 DECISION, and the one that may need the project owner: if a real call to the demo number is not possible on the trial, choose between upgrading to a paid number and demonstrating on the browser harness. Record the choice and the remaining call budget in the decision log
@@ -175,10 +182,21 @@ produced (design D8).
 
 ## 7. The browser microphone harness
 
-- [ ] 7.1 Add an admin-only harness page under `/portal` that captures microphone PCM, streams it to the session and plays the audio that comes back
-- [ ] 7.2 Show the running transcript, every tool call with its arguments, and the resolved end reason and the outcome it maps to
-- [ ] 7.3 Enforce that a harness session writes nothing: no attempt row, no lead transition, no scoring. Assert it in a test, not only by inspection
-- [ ] 7.4 Run a full conversation through the harness against the real Live model, in both `pt` and `en`, and record what it cost in quota. This is the first end-to-end proof of the voice half, and it costs no telephony
+- [x] 7.1 Add an admin-only harness page under `/portal` that captures microphone PCM, streams it to the session and plays the audio that comes back
+- [x] 7.2 Show the running transcript, every tool call with its arguments, and the resolved end reason and the outcome it maps to
+- [x] 7.3 Enforce that a harness session writes nothing: no attempt row, no lead transition, no scoring. Assert it in a test, not only by inspection
+- [x] 7.3 was written as structural assertions rather than behavioural ones.
+  The thing worth guaranteeing is an ABSENCE, and an absence is the easiest
+  thing to lose by accident — someone adds "and score it while we're here"
+  later and every behavioural test still passes. The tests read the route and
+  the page and fail if any writer appears, if the db import grows past
+  `getDb` and `listActiveCriteria`, or if either admin guard is removed.
+
+- [ ] 7.4 Run a full conversation through the harness against the real Live model, in both `pt` and `en`, and record what it cost in quota. This is the first end-to-end proof of the voice half, and it costs no telephony — NEEDS A HUMAN AND A MICROPHONE. Run
+  `pnpm dev:voice`, open `/portal/harness` as an admin, and hold a call in each
+  language. This is also where input-audio transcription gets verified for the
+  first time: task 1.2 sent text, so the lead half of the transcript has never
+  been exercised against real speech.
 
 ## 8. Attempt persistence for a real call
 

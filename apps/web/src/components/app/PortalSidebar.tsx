@@ -27,6 +27,9 @@ export function PortalSidebar({ employee, counts }: Props) {
     { href: "/portal/criteria", label: "Criteria", count: String(counts.criteria) },
     { href: "/portal/violations", label: "Guardrails", count: String(counts.violations) },
     { href: "/portal/audit", label: "Audit history", count: String(counts.audit) },
+    // Admin-only, and the page redirects an agent away. Shown to admins only so
+    // the nav does not advertise a door that will not open.
+    ...(employee.role === "admin" ? [{ href: "/portal/harness", label: "Voice harness", count: "" }] : []),
   ];
 
   return (

@@ -17,6 +17,7 @@
     "@solarwave/core": "workspace:^",
     "@solarwave/db": "workspace:^",
     "@solarwave/scoring": "workspace:^",
+    "@solarwave/voice": "workspace:^",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.115.0",
     "@vercel/functions": "^3.9.5",
