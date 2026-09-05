@@ -84,6 +84,7 @@ async function run(ws: WebSocket, criteria: ScriptCriterion[], language: "pt" | 
               endedReason: event.result.endedReason,
               transportClose: event.result.transportClose,
               transportError: event.result.transportError,
+              rejected: event.result.rejectedToolCalls,
             });
             send({
               type: "ended",
@@ -95,6 +96,7 @@ async function run(ws: WebSocket, criteria: ScriptCriterion[], language: "pt" | 
               transportError: event.result.transportError,
               durationSeconds: event.result.durationSeconds,
               liveAnswers: event.result.liveAnswers,
+              rejectedToolCalls: event.result.rejectedToolCalls,
               // Said plainly on the page, so nobody mistakes a rehearsal for a
               // recorded attempt.
               persisted: false,

@@ -94,6 +94,16 @@ export class CallState {
   private readonly order: ScriptCriterion[];
   private readonly settings: ScoringSettings;
 
+  /**
+   * Tool calls that were dropped because their arguments made no sense.
+   *
+   * Kept rather than ignored: a `record_answer` the model malformed loses an
+   * answer, and losing one silently is the worst version of that. Measured on
+   * the first real voice session, where the model called
+   * `record_answer({homeowner: true})` twice and both answers vanished.
+   */
+  readonly rejected: { name: string; input: unknown }[] = [];
+
   optedOut = false;
   minorFlagged = false;
   /** The time the lead asked to be called back, verbatim. Change 5 decides what to do with it. */
@@ -112,6 +122,7 @@ export class CallState {
       case "record_answer": {
         const answer = readAnswer(input);
         if (answer) this.answers.set(answer.criterionKey, answer);
+        else this.rejected.push({ name, input });
         break;
       }
       case "mark_opt_out":

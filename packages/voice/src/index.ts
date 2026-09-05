@@ -44,9 +44,11 @@ export {
 } from "./callToken";
 export { connectStreamTwiml, hangUpTwiml, type ConnectStreamInput } from "./twiml";
 export {
+  DEFAULT_VAD,
   geminiTransport,
   type LiveConnectOptions,
   type LiveConnection,
   type LiveEvent,
   type LiveTransport,
+  type VoiceActivityTuning,
 } from "./transport";

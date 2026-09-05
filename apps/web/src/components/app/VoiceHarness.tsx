@@ -32,6 +32,7 @@ type Ended = {
   transportError?: string;
   durationSeconds: number;
   liveAnswers: { criterionKey: string; value: string }[];
+  rejectedToolCalls: { name: string; input: unknown }[];
 };
 
 /** Plain English for the thing that ended the call. */
@@ -296,6 +297,20 @@ export function VoiceHarness() {
                 : ended.liveAnswers.map((a) => `${a.criterionKey}=${a.value || "(empty)"}`).join(", ")}
             </dd>
           </dl>
+          {ended.rejectedToolCalls?.length ? (
+            <p
+              style={{
+                fontSize: "var(--body-3)",
+                color: "var(--danger, #b3261e)",
+                marginTop: "var(--space-3)",
+                lineHeight: 1.55,
+              }}
+            >
+              {ended.rejectedToolCalls.length} tool call
+              {ended.rejectedToolCalls.length === 1 ? " was" : "s were"} dropped for malformed arguments — an answer
+              was lost. {ended.rejectedToolCalls.map((r) => `${r.name}(${JSON.stringify(r.input)})`).join(" ")}
+            </p>
+          ) : null}
           <p style={{ fontSize: "var(--body-4, 12px)", color: "var(--text-muted)", marginTop: "var(--space-3)" }}>
             Nothing was persisted. This was a rehearsal, not an attempt.
           </p>

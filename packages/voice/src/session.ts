@@ -62,6 +62,8 @@ export type VoiceCallResult = {
   optedOut: boolean;
   minorFlagged: boolean;
   requestedCallback: string | null;
+  /** Tool calls dropped for malformed arguments. Empty is the healthy case. */
+  rejectedToolCalls: { name: string; input: unknown }[];
   /** True when something other than the agent stopped the call. */
   cutOff: boolean;
   durationSeconds: number;
@@ -88,6 +90,8 @@ export type StartVoiceSessionInput = {
   maxCallSeconds?: number;
   /** The rate the audio handed to `sendAudio` is sampled at. */
   inputRate?: number;
+  /** Overrides the voice-activity defaults; see `DEFAULT_VAD`. */
+  vad?: { silenceDurationMs?: number; prefixPaddingMs?: number };
   onEvent: (event: VoiceSessionEvent) => void;
 };
 
@@ -149,6 +153,7 @@ export async function startVoiceSession({
   wrapUpSeconds = DEFAULT_WRAP_UP_SECONDS,
   maxCallSeconds = DEFAULT_MAX_CALL_SECONDS,
   inputRate = 16000,
+  vad,
   onEvent,
 }: StartVoiceSessionInput): Promise<VoiceSession> {
   const script = buildCallScript({ criteria, language, leadName, medium: "voice" });
@@ -194,6 +199,7 @@ export async function startVoiceSession({
         optedOut: state.optedOut,
         minorFlagged: state.minorFlagged,
         requestedCallback: state.requestedCallback,
+        rejectedToolCalls: state.rejected,
         cutOff,
         durationSeconds: Math.round((Date.now() - startedAt) / 1000),
         stoppedBy,
@@ -299,6 +305,7 @@ export async function startVoiceSession({
     model,
     systemInstruction: script.system,
     functionDeclarations: toFunctionDeclarations(script.order.map((c) => c.key)),
+    vad,
     onEvent: handle,
   });
 

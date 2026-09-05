@@ -1,4 +1,12 @@
-import { GoogleGenAI, Modality, type LiveServerMessage, type Session } from "@google/genai";
+import {
+  ActivityHandling,
+  EndSensitivity,
+  GoogleGenAI,
+  Modality,
+  StartSensitivity,
+  type LiveServerMessage,
+  type Session,
+} from "@google/genai";
 import type { FunctionDeclaration } from "@solarwave/agent";
 import { pcm16Bytes } from "./audio";
 
@@ -33,6 +41,35 @@ export type LiveConnectOptions = {
   systemInstruction: string;
   functionDeclarations: FunctionDeclaration[];
   onEvent: (event: LiveEvent) => void;
+  /** Overrides the voice-activity defaults below. */
+  vad?: Partial<VoiceActivityTuning>;
+};
+
+export type VoiceActivityTuning = {
+  /** Silence, in ms, before the model decides the lead has finished speaking. */
+  silenceDurationMs: number;
+  /** Speech, in ms, before the model decides the lead has started. */
+  prefixPaddingMs: number;
+};
+
+/**
+ * Tuned for a telephone conversation, not for a dictation app.
+ *
+ * The SDK's own note on `silenceDurationMs` is the whole story: "the larger
+ * this value ... this will increase the model's latency". Left at its default,
+ * the first real harness session sat silent for sixteen seconds before the
+ * agent spoke and twenty to thirty between questions, on a microphone the
+ * transcript showed was picking up constant `<noise>` — so the detector rarely
+ * saw a gap long enough to call the turn over.
+ *
+ * 700 ms is roughly the pause a person leaves at the end of a sentence and
+ * still tolerates being answered into. Configurable, because the right value on
+ * an eight-kilohertz phone line is not obviously the right value on a laptop
+ * microphone, and this is now measurable rather than guessed.
+ */
+export const DEFAULT_VAD: VoiceActivityTuning = {
+  silenceDurationMs: 700,
+  prefixPaddingMs: 200,
 };
 
 export type LiveConnection = {
@@ -56,7 +93,8 @@ export type LiveTransport = (options: LiveConnectOptions) => Promise<LiveConnect
  * transcription — so the failure looks like a network problem and is not one.
  */
 export function geminiTransport(apiKey: string): LiveTransport {
-  return async ({ model, systemInstruction, functionDeclarations, onEvent }) => {
+  return async ({ model, systemInstruction, functionDeclarations, onEvent, vad }) => {
+    const activity = { ...DEFAULT_VAD, ...vad };
     const ai = new GoogleGenAI({ apiKey });
 
     const session: Session = await ai.live.connect({
@@ -67,6 +105,18 @@ export function geminiTransport(apiKey: string): LiveTransport {
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         tools: [{ functionDeclarations }],
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+            prefixPaddingMs: activity.prefixPaddingMs,
+            silenceDurationMs: activity.silenceDurationMs,
+          },
+          // The lead talking over the agent stops the agent. That is what a
+          // person expects on a phone, and the bridge already flushes the
+          // audio Twilio has buffered when it happens.
+          activityHandling: ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+        },
       },
       callbacks: {
         onopen: () => onEvent({ type: "open" }),
