@@ -25,6 +25,19 @@ export {
   type ModelCheck,
   type Fetch,
 } from "./catalogue";
-export { fakeStructuredModel, failingModel, type FakeCall } from "./testing";
+export {
+  generateTurn,
+  type AgentTurn,
+  type AgentToolCall,
+  type GenerateTurnInput,
+} from "./conversation";
+export {
+  fakeStructuredModel,
+  fakeToolCallingModel,
+  failingModel,
+  type FakeCall,
+  type FakeTurn,
+} from "./testing";
 /** Re-exported so downstream packages never import the SDK directly. */
-export type { LanguageModel } from "ai";
+export type { LanguageModel, ModelMessage, Tool, ToolSet } from "ai";
+export { tool } from "ai";

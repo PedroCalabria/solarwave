@@ -1,10 +1,12 @@
 "use client";
 
+import { callOrder, type LintWarning } from "@solarwave/agent";
 import { CRITERION_TYPES, type CriterionType, type ScoringSettings } from "@solarwave/core";
 import Link from "next/link";
 import { useActionState, useState, useTransition, type CSSProperties } from "react";
 import {
   deleteCriterionAction,
+  lintQuestionAction,
   saveCriterionAction,
   saveSettingsAction,
   toggleCriterionAction,
@@ -106,16 +108,54 @@ export function CriteriaManager({ criteria, settings, recentAudit, canEdit }: Pr
   const [rowMessage, setRowMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [handledNonce, setHandledNonce] = useState(0);
+  const [warnings, setWarnings] = useState<LintWarning[]>([]);
+  const [linting, setLinting] = useState(false);
+
+  /**
+   * The lint runs AFTER the save has already returned, never inside it: a
+   * warning is advice about a criterion that is already persisted, and the save
+   * must not wait on a model or be rejected by one (design D10).
+   */
+  const lint = (input: { label: string; questionPt: string; questionEn: string }) => {
+    setLinting(true);
+    startTransition(async () => {
+      const result = await lintQuestionAction(input);
+      setWarnings(result.warnings);
+      setLinting(false);
+    });
+  };
 
   // Reset the form once per successful save (state adjusted during render, no effect).
   if (saveState.ok && saveState.nonce !== handledNonce) {
     setHandledNonce(saveState.nonce);
+    lint({ label: form.label, questionPt: form.questionPt, questionEn: form.questionEn });
     setForm(EMPTY_FORM);
   }
 
   const activeCount = criteria.filter((c) => c.active).length;
   const weightTotal = criteria.filter((c) => c.active).reduce((sum, c) => sum + c.weight, 0);
   const overBudget = activeCount > QUESTION_BUDGET;
+  /**
+   * The order the agent will actually ask these questions in, which is NOT the
+   * sort_order this table is listed by: the script puts blocking criteria first
+   * so a failed one can end the call early (design D5). Showing it here keeps an
+   * admin who drags a row from believing the call follows the list.
+   */
+  const order = callOrder(
+    criteria.map((c) => ({
+      key: c.key,
+      label: c.label,
+      questionPt: c.questionPt,
+      questionEn: c.questionEn,
+      type: c.type,
+      options: c.options,
+      expectedValue: c.expectedValue,
+      weight: c.weight,
+      blocking: c.blocking,
+      active: c.active,
+      sortOrder: c.sortOrder,
+    })),
+  );
   const editing = form.id !== null;
 
   const edit = (c: Criterion) =>
@@ -173,6 +213,28 @@ export function CriteriaManager({ criteria, settings, recentAudit, canEdit }: Pr
               }}
             >
               {`${activeCount} active criteria exceed the ${QUESTION_BUDGET}-question budget — the call may run past two minutes.`}
+            </p>
+          ) : null}
+          {order.length > 0 ? (
+            <p
+              style={{
+                fontSize: "var(--body-3)",
+                color: "var(--text-muted)",
+                margin: "var(--space-2) 0 0",
+              }}
+            >
+              <span className={styles.mono} style={{ letterSpacing: ".08em" }}>
+                call order
+              </span>{" "}
+              {order.map((c, i) => (
+                <span key={c.key}>
+                  {i > 0 ? " → " : ""}
+                  <span style={{ color: c.blocking ? "var(--text-strong)" : undefined }}>
+                    {c.label}
+                    {c.blocking ? " (blocking)" : ""}
+                  </span>
+                </span>
+              ))}
             </p>
           ) : null}
         </div>
@@ -564,9 +626,43 @@ export function CriteriaManager({ criteria, settings, recentAudit, canEdit }: Pr
                 </div>
               ) : null}
 
+              {warnings.length > 0 ? (
+                <div
+                  role="status"
+                  style={{
+                    background: "var(--white)",
+                    borderLeft: "2px solid var(--ink-900)",
+                    padding: "10px 14px",
+                    borderRadius: "var(--radius-xs)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  <span className={styles.mono} style={{ letterSpacing: ".08em" }}>
+                    question review — advice only
+                  </span>
+                  {warnings.map((w, i) => (
+                    <span key={i} style={{ fontSize: "var(--body-3)", color: "var(--text-body)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--label-2)" }}>{w.concern}</span>{" "}
+                      {w.message}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
               <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" }}>
                 <PillButton type="submit" variant="primary" size="sm" icon="check" disabled={saving}>
                   {saving ? "Saving…" : editing ? "Save changes" : "Create criterion"}
+                </PillButton>
+                <PillButton
+                  variant="ghost"
+                  size="sm"
+                  showKnob={false}
+                  onClick={() => lint({ label: form.label, questionPt: form.questionPt, questionEn: form.questionEn })}
+                  disabled={linting || isPending}
+                >
+                  {linting ? "Checking…" : "Check question"}
                 </PillButton>
                 {editing ? (
                   <PillButton variant="ghost" size="sm" showKnob={false} onClick={remove} disabled={isPending}>

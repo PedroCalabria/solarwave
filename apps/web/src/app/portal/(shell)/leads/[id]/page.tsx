@@ -1,5 +1,7 @@
-import { getDb, getLeadDetail, getSettings } from "@solarwave/db";
+import { getDb, getLeadDetail, getSettings, isSimulated } from "@solarwave/db";
 import { reportStaleness } from "@solarwave/scoring";
+import { requireEmployee } from "@/lib/auth";
+import { SimulateCall } from "@/components/app/SimulateCall";
 import { StalenessBanner } from "@/components/app/StalenessBanner";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -55,7 +57,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   if (!UUID.test(id)) notFound();
 
   const db = getDb();
-  const [lead, settings] = await Promise.all([getLeadDetail(db, id), getSettings(db)]);
+  const [employee, lead, settings] = await Promise.all([requireEmployee(), getLeadDetail(db, id), getSettings(db)]);
   if (!lead) notFound();
 
   const badge = STATUS[lead.status];
@@ -70,6 +72,16 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   );
   const failedBlocking = answers.some((a) => a.criterion.blocking && a.passed === false);
   const transcriptAttempt = lead.latestTranscriptAttempt;
+
+  // Admin-only. The action refuses these two cases itself; disabling the
+  // control here just says so before the click rather than after it.
+  const canSimulate = employee.role === "admin";
+  const simulateBlocked =
+    lead.status === "opt_out"
+      ? "This lead opted out. Contact is blocked for all future outreach, simulated included."
+      : lead.status === "calling"
+        ? "A call for this lead is already in flight."
+        : null;
 
   const fields = [
     { label: "Phone", value: formatPhone(lead.phone) },
@@ -110,6 +122,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <div className={detail.grid}>
         <div className={detail.column}>
+          {canSimulate ? (
+            <SimulateCall leadId={lead.id} disabled={simulateBlocked !== null} note={simulateBlocked ?? undefined} />
+          ) : null}
+
           {staleness && lead.latestScoredAttempt ? (
             <StalenessBanner
               staleness={staleness}
@@ -314,7 +330,21 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                           {formatDuration(a.startedAt, a.endedAt)}
                         </span>
                       </div>
-                      {a.endedReason ? (
+                      {isSimulated(a) ? (
+                        <div style={{ marginTop: 5 }}>
+                          <span
+                            className={styles.mono}
+                            style={{
+                              letterSpacing: ".08em",
+                              border: "1px solid var(--line-hairline)",
+                              borderRadius: "var(--radius-pill)",
+                              padding: "2px 9px",
+                            }}
+                          >
+                            simulated — no phone call was placed
+                          </span>
+                        </div>
+                      ) : a.endedReason ? (
                         <div style={{ fontSize: "var(--body-3)", lineHeight: 1.55, color: "var(--text-muted)", marginTop: 5, textWrap: "pretty" }}>
                           {a.endedReason}
                         </div>

@@ -22,14 +22,18 @@ context: |
   ## Repository state (2026-09-05)
   - pnpm monorepo. `apps/web` = Next.js 16 (App Router, React 19), plus
     `packages/core` (pure domain rules), `packages/db` (Drizzle + Supabase),
-    `packages/ai` (AI SDK adapters) and `packages/scoring` (the worker).
+    `packages/ai` (AI SDK adapters), `packages/scoring` (the worker) and
+    `packages/agent` (the conversation agent).
   - Done: database and migrations, Supabase Auth, Turnstile, DB-backed rate
     limiting and dedup, the portal on real data, criteria CRUD with audit, the
-    deterministic scoring engine, and the scoring worker (extraction, narrative,
-    guardrail judge, recomputation).
-  - Not built yet: `leadWorkflow` and any call trigger, the voice bridge,
+    deterministic scoring engine, the scoring worker (extraction, narrative,
+    guardrail judge, recomputation), and the conversation agent in text (script
+    assembly, tool contract, loop, question linter, persona eval, simulated
+    calls from the portal).
+  - Not built yet: `leadWorkflow` and any REAL call trigger, the voice bridge,
     Twilio, the transcript purge and keep-alive crons. `workflow_run_id` exists
-    as a column with nothing writing it.
+    as a column with nothing writing it. A simulated call is the only way to
+    exercise the pipeline end to end today.
   - Demo transcripts and their hand-written expected answers live in
     `packages/db/src/seed/data.ts`, exported as the golden set through
     `@solarwave/scoring`. `apps/web/src/lib/leads.ts` is presentation helpers
@@ -73,6 +77,10 @@ context: |
   - Text models (scoring extraction, reason/icebreaker, guardrail judge,
     question linter, simulated leads for evals): Gemini Flash (non-realtime,
     satisfying spec section 4.6 "a different, non-realtime model").
+  - Model roles use TWO env prefixes, not one: `SCORING_MODEL_*` for extraction,
+    narrative and judge; `AGENT_MODEL_*` for conversation, persona and linter.
+    A rename was rejected as pure churn that would break every existing
+    `.env.local` and Vercel setting (conversation-agent-text design D3).
   - SDKs: Vercel AI SDK (`ai`) with AI Gateway "google/<model>" strings for
     everything text/structured-output. `@google/genai` Live client ONLY for the
     realtime call (AI SDK does not cover bidirectional realtime audio). Never
@@ -95,6 +103,11 @@ context: |
     never stored (spec section 10).
 
   ## Conversation design decisions
+  - Learned the hard way in change 3, and it applies to change 4 too: an
+    assistant turn's TOOL CALLS must be appended to the message history along
+    with a result for each one. A model that cannot see its own tool calls
+    re-issues them silently until whatever turn cap exists runs out. Unit tests
+    with a scripted model do not catch this; only a real conversation does.
   - The script is DRIVEN BY THE ACTIVE CRITERIA. The system prompt is assembled
     at call time from active criteria. Fixed, non-editable frame: AI disclosure,
     permission to ask, tone rules, all section 6 guardrails, closing. Criteria
@@ -180,8 +193,12 @@ context: |
      wiring, reason/icebreaker, guardrail judge, manual recomputation, golden
      fixtures. Split the enum `options` vocabulary from the `expected_value`
      pass rule; `packages/ai` and `packages/scoring` were added here.
-  3. conversation-agent-text — prompt assembly from criteria, tools schema,
-     question linter, simulated-lead eval suite.
+  3. conversation-agent-text — DONE. Script assembled from criteria behind a
+     fixed guardrail frame, a provider-neutral tool registry projected to both
+     the AI SDK and Gemini Live, the conversation loop, the fail-open question
+     linter, the persona eval (probes + scripted flows, ~39 requests), and
+     simulated calls persisted as real attempts. `packages/agent` was added
+     here. No migration.
   4. voice-bridge — Twilio webhooks, Media Streams WS, Gemini Live, resample,
      barge-in, transcript capture, 90 s / 3 min timers, AMD, status callbacks.
   5. lifecycle-and-operations — leadWorkflow (sleep/hook/retry/window),
@@ -192,8 +209,15 @@ context: |
   - SETTLED by scoring-worker (design D2): the lead stays `calling` while its
     attempt is scored. No `scoring` status was added; `call_attempts.scoring_status`
     carries the machine-facing detail.
-  - Callback-requested: honour the lead's requested time inside the window as
-    the next attempt (recommended) vs. follow the fixed 15 m / 2 d policy.
+  - SETTLED by conversation-agent-text: the call order is DERIVED (blocking,
+    then descending weight, then `sort_order`, then key) and is separate from
+    the `sort_order` order the portal lists criteria by; the portal shows a
+    preview of the real call order so the two cannot silently disagree.
+  - SETTLED by conversation-agent-text: the hostile-exit budget is 2 turns after
+    the first hostile utterance, measured rather than invented (`EVAL_HOSTILE_TURNS`).
+  - Callback-requested: STILL OPEN. `request_callback` now captures the time the
+    lead asked for, and the loop maps that call to `answered_incomplete`; whether
+    that time overrides the fixed 15 m / 2 d policy belongs to change 5.
   - Whether the Twilio trial announcement/verification limits force a paid
     upgrade before the demo.
 

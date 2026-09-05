@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assertConfiguredModels, checkConfiguredModels, type Fetch } from "./catalogue";
-import { requireModelId } from "./env";
+import { MODEL_ROLES, envVarFor, requireModelId } from "./env";
 
 /** Google returns `models/<id>` and needs the key; the Gateway's list did neither. */
 const CATALOGUE = {
@@ -18,11 +18,19 @@ const stubFetch = (body: unknown = CATALOGUE, status = 200): Fetch =>
       json: async () => body,
     }) as Response) as Fetch;
 
-const env = (extraction: string, narrative: string, judge: string): NodeJS.ProcessEnv => ({
+/**
+ * Every role must be set or `requireModelId` throws, so the helper fills all of
+ * them with a known-good id and takes overrides for the ones a test cares about.
+ */
+const env = (overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({
   GOOGLE_GENERATIVE_AI_API_KEY: "test-key",
-  SCORING_MODEL_EXTRACTION: extraction,
-  SCORING_MODEL_NARRATIVE: narrative,
-  SCORING_MODEL_JUDGE: judge,
+  SCORING_MODEL_EXTRACTION: "gemini-3.8-flash",
+  SCORING_MODEL_NARRATIVE: "gemini-3.5-flash-lite",
+  SCORING_MODEL_JUDGE: "gemini-3.5-flash-lite",
+  AGENT_MODEL_CONVERSATION: "gemini-3.5-flash-lite",
+  AGENT_MODEL_PERSONA: "gemini-3.5-flash-lite",
+  AGENT_MODEL_LINTER: "gemini-3.5-flash-lite",
+  ...overrides,
 });
 
 describe("requireModelId", () => {
@@ -42,22 +50,45 @@ describe("requireModelId", () => {
   it("rejects a variable that is only whitespace", () => {
     expect(() => requireModelId("judge", { SCORING_MODEL_JUDGE: "   " })).toThrow();
   });
+
+  it("reads the agent roles from their own prefix, leaving the scoring names alone", () => {
+    // Design D3: two prefixes rather than a rename, so no existing .env.local
+    // or Vercel setting breaks when the agent roles arrive.
+    expect(requireModelId("conversation", { AGENT_MODEL_CONVERSATION: "gemini-3.5-flash-lite" })).toBe(
+      "gemini-3.5-flash-lite",
+    );
+    expect(requireModelId("persona", { AGENT_MODEL_PERSONA: "gemini-3.5-flash-lite" })).toBe("gemini-3.5-flash-lite");
+    expect(requireModelId("linter", { AGENT_MODEL_LINTER: "gemini-3.5-flash-lite" })).toBe("gemini-3.5-flash-lite");
+  });
+
+  it("applies the gateway-slug guard to the agent roles too", () => {
+    expect(() => requireModelId("conversation", { AGENT_MODEL_CONVERSATION: "google/gemini-3.5-flash-lite" })).toThrow(
+      /drop the provider prefix.*gemini-3\.5-flash-lite/s,
+    );
+  });
+
+  it("names the agent variable when it is missing", () => {
+    expect(() => requireModelId("persona", {})).toThrow(/AGENT_MODEL_PERSONA is not set/);
+  });
+
+  it("maps every role to a distinct variable", () => {
+    const names = MODEL_ROLES.map((role) => envVarFor(role));
+    expect(new Set(names).size).toBe(MODEL_ROLES.length);
+  });
 });
 
 describe("checkConfiguredModels", () => {
   it("marks every configured id available when the catalogue lists it", async () => {
     const checks = await checkConfiguredModels(
-      env("gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite"),
-      stubFetch(),
-    );
+      env(), stubFetch());
 
-    expect(checks).toHaveLength(3);
+    expect(checks).toHaveLength(MODEL_ROLES.length);
     expect(checks.every((c) => c.available)).toBe(true);
   });
 
   it("flags an id that has left the catalogue", async () => {
     const checks = await checkConfiguredModels(
-      env("gemini-2.0-retired", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite"),
+      env({ SCORING_MODEL_EXTRACTION: "gemini-2.0-retired" }),
       stubFetch(),
     );
 
@@ -68,29 +99,24 @@ describe("checkConfiguredModels", () => {
 describe("assertConfiguredModels", () => {
   it("passes silently when everything resolves", async () => {
     await expect(
-      assertConfiguredModels(
-        env("gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite"),
-        stubFetch(),
-      ),
+      assertConfiguredModels(env(), stubFetch()),
     ).resolves.toBeUndefined();
   });
 
   it("names every misconfigured role in one message", async () => {
-    const promise = assertConfiguredModels(
-      env("gone-a", "gone-b", "gemini-3.5-flash-lite"),
-      stubFetch(),
-    );
+    const broken = env({ SCORING_MODEL_EXTRACTION: "gone-a", AGENT_MODEL_CONVERSATION: "gone-b" });
+    const promise = assertConfiguredModels(broken, stubFetch());
 
     await expect(promise).rejects.toThrow(/SCORING_MODEL_EXTRACTION=gone-a/);
-    await expect(
-      assertConfiguredModels(env("gone-a", "gone-b", "gemini-3.5-flash-lite"), stubFetch()),
-    ).rejects.toThrow(/SCORING_MODEL_NARRATIVE=gone-b/);
+    await expect(assertConfiguredModels(broken, stubFetch())).rejects.toThrow(
+      /AGENT_MODEL_CONVERSATION=gone-b/,
+    );
   });
 
   it("requires the API key, unlike the gateway list which was public", async () => {
     await expect(
       assertConfiguredModels(
-        { SCORING_MODEL_EXTRACTION: "gemini-3.8-flash", SCORING_MODEL_NARRATIVE: "x", SCORING_MODEL_JUDGE: "y" },
+        { ...env(), GOOGLE_GENERATIVE_AI_API_KEY: "" },
         stubFetch(),
       ),
     ).rejects.toThrow(/GOOGLE_GENERATIVE_AI_API_KEY is not set/);
@@ -98,10 +124,7 @@ describe("assertConfiguredModels", () => {
 
   it("surfaces a catalogue outage rather than silently passing", async () => {
     await expect(
-      assertConfiguredModels(
-        env("gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite"),
-        stubFetch({}, 503),
-      ),
+      assertConfiguredModels(env(), stubFetch({}, 503)),
     ).rejects.toThrow(/HTTP 503/);
   });
 });

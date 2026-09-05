@@ -1,5 +1,7 @@
 "use server";
 
+import { lintQuestions, type LintWarning } from "@solarwave/agent";
+import { hasApiKey, modelFor } from "@solarwave/ai";
 import { CRITERION_TYPES, type CriterionType } from "@solarwave/core";
 import {
   SETTING_KEYS,
@@ -22,7 +24,7 @@ function revalidate() {
 }
 
 function fail(prev: ActionState, message: string, fieldErrors: Record<string, string> = {}): ActionState {
-  return { ok: false, message, fieldErrors, nonce: prev.nonce + 1 };
+  return { ok: false, message, fieldErrors, warnings: [], nonce: prev.nonce + 1 };
 }
 
 function parseCriterionForm(formData: FormData): { input: CriterionInput; id: string | null } {
@@ -71,8 +73,12 @@ export async function saveCriterionAction(prev: ActionState, formData: FormData)
   }
 
   revalidate();
+  // No lint here on purpose: the save must not wait on a model, and a warning
+  // must not be able to reject an admin's work (design D10). The client calls
+  // `lintQuestionAction` separately once this returns.
   return {
     ok: true,
+    warnings: [],
     message: id
       ? result.changedFields.length
         ? `Saved. Audited fields: ${result.changedFields.join(", ")}.`
@@ -132,5 +138,42 @@ export async function saveSettingsAction(prev: ActionState, formData: FormData):
   if (!outcome.ok) return fail(prev, "Please fix the highlighted fields.", { [outcome.error.field]: outcome.error.message });
 
   revalidate();
-  return { ok: true, message: "Settings saved.", fieldErrors: {}, nonce: prev.nonce + 1 };
+  return { ok: true, message: "Settings saved.", fieldErrors: {}, warnings: [], nonce: prev.nonce + 1 };
+}
+
+/**
+ * The advisory question check (design D10).
+ *
+ * Deliberately its own action rather than part of `saveCriterionAction`: a
+ * model call inside a form submission makes every criterion edit feel broken
+ * when the free tier throttles, and makes the portal unusable without an API
+ * key — which the seed path and the integration tests deliberately support.
+ * The client calls this after a successful save, and the "Check question"
+ * control calls it before one.
+ *
+ * It fails open in every direction: `lintQuestions` never throws and returns no
+ * warnings on any model failure, and a caller who is not an admin simply gets
+ * nothing rather than an error.
+ */
+export async function lintQuestionAction(input: {
+  label: string;
+  questionPt: string;
+  questionEn: string;
+}): Promise<{ warnings: LintWarning[] }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { warnings: [] };
+  }
+
+  if (!hasApiKey()) return { warnings: [] };
+
+  const warnings = await lintQuestions({
+    model: modelFor("linter"),
+    label: input.label,
+    questionPt: input.questionPt,
+    questionEn: input.questionEn,
+  });
+
+  return { warnings };
 }

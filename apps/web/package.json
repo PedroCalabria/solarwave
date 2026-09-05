@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.6.1",
+    "@solarwave/agent": "workspace:^",
     "@solarwave/ai": "workspace:^",
     "@solarwave/core": "workspace:^",
     "@solarwave/db": "workspace:^",
