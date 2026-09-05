@@ -14,6 +14,7 @@
     "db:migrate": "pnpm --filter @solarwave/db migrate",
     "db:seed": "pnpm --filter @solarwave/db seed",
     "eval": "pnpm --filter @solarwave/scoring eval",
-    "eval:agent": "pnpm --filter @solarwave/agent eval"
+    "eval:agent": "pnpm --filter @solarwave/agent eval",
+    "eval:voice": "pnpm --filter @solarwave/voice eval"
   }
 }

@@ -15,11 +15,13 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "spike:live": "dotenv -e ../../apps/web/.env.local -- tsx src/spike/live.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "eval": "dotenv -e ../../apps/web/.env.local -- tsx src/eval/run.ts"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
     "@solarwave/agent": "workspace:*",
+    "@solarwave/ai": "workspace:*",
     "@solarwave/core": "workspace:*",
     "@solarwave/db": "workspace:*",
     "@solarwave/scoring": "workspace:*",

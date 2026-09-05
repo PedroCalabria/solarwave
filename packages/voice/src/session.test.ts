@@ -41,6 +41,7 @@ const CRITERIA: ScriptCriterion[] = [
  */
 function fakeTransport() {
   const sentText: string[] = [];
+  const sentHistory: { role: string; text: string }[][] = [];
   const sentAudio: Int16Array[] = [];
   const toolResponses: { id?: string; name: string; output: Record<string, unknown> }[] = [];
   const captured = { systemInstruction: "", functionDeclarations: [] as { name: string }[] };
@@ -54,6 +55,7 @@ function fakeTransport() {
     const connection: LiveConnection = {
       sendAudio: (pcm) => sentAudio.push(pcm),
       sendText: (text) => sentText.push(text),
+      sendHistory: (turns) => sentHistory.push(turns),
       sendToolResponse: (calls) => toolResponses.push(...calls),
       close: () => {
         closed = true;
@@ -64,6 +66,7 @@ function fakeTransport() {
 
   return Object.assign(transport, {
     sentText,
+    sentHistory,
     sentAudio,
     toolResponses,
     // A method, not a getter: Object.assign copies a getter's VALUE, so

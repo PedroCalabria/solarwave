@@ -244,6 +244,9 @@ importers:
       '@solarwave/agent':
         specifier: workspace:*
         version: link:../agent
+      '@solarwave/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@solarwave/core':
         specifier: workspace:*
         version: link:../core

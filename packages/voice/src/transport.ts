@@ -77,6 +77,14 @@ export type LiveConnection = {
   sendAudio(pcm: Int16Array, rate: number): void;
   /** An instruction from us, never from the lead. Only between turns. */
   sendText(text: string): void;
+  /**
+   * Seeds a conversation that already happened, then asks for the next turn.
+   *
+   * Only the evaluation uses this: a probe needs the agent to answer a specific
+   * provocation with the right context behind it, without spending a whole
+   * conversation getting there.
+   */
+  sendHistory(turns: { role: "user" | "model"; text: string }[]): void;
   sendToolResponse(calls: { id?: string; name: string; output: Record<string, unknown> }[]): void;
   close(): void;
 };
@@ -163,6 +171,12 @@ export function geminiTransport(apiKey: string): LiveTransport {
       },
       sendText(text) {
         session.sendClientContent({ turns: [{ role: "user", parts: [{ text }] }], turnComplete: true });
+      },
+      sendHistory(turns) {
+        session.sendClientContent({
+          turns: turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
+          turnComplete: true,
+        });
       },
       sendToolResponse(calls) {
         session.sendToolResponse({
