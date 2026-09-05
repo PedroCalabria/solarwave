@@ -134,12 +134,30 @@ than assumed:
 
 ## 6. `packages/voice` — the realtime session
 
-- [ ] 6.1 Implement the session: open a Live session configured with `buildCallScript(..., { medium: "voice" })` and `toFunctionDeclarations(keys)`, and expose an interface that takes PCM in and emits PCM out, so both the harness and the bridge drive the same object (design D2)
-- [ ] 6.2 Accumulate the transcript from input and output transcription into `TranscriptTurn[]`, closing a turn when the speaker changes. Never write audio anywhere (spec section 10)
-- [ ] 6.3 Handle every tool call through the module from 4.1, and return a result for each one — the lesson change 3 recorded and the decision log repeats: a model that cannot see its own tool calls silently reissues them
-- [ ] 6.4 Implement the wrap-up injection at `VOICE_WRAP_UP_SECONDS`, the early wrap-up once `hasEnoughInformation` is satisfied, and the hard stop at `VOICE_MAX_CALL_SECONDS`, both configurable and both well inside the platform duration limit
-- [ ] 6.5 Handle the interruption signal: expose it to the host so it can flush buffered audio, and mark the interrupted transcript turn while keeping its full text (design D8)
-- [ ] 6.6 Unit-test the session against a fake Live transport: fragments accumulate into turns, the wrap-up fires exactly once, the hard stop resolves `incomplete`, `mark_opt_out` outranks a stated `end_call` reason, `flag_minor` ends the call, and every tool call receives a result
+- [x] 6.1 Implement the session: open a Live session configured with `buildCallScript(..., { medium: "voice" })` and `toFunctionDeclarations(keys)`, and expose an interface that takes PCM in and emits PCM out, so both the harness and the bridge drive the same object (design D2)
+- [x] 6.2 Accumulate the transcript from input and output transcription into `TranscriptTurn[]`, closing a turn when the speaker changes. Never write audio anywhere (spec section 10)
+- [x] 6.3 Handle every tool call through the module from 4.1, and return a result for each one — the lesson change 3 recorded and the decision log repeats: a model that cannot see its own tool calls silently reissues them
+- [x] 6.4 Implement the wrap-up injection at `VOICE_WRAP_UP_SECONDS`, the early wrap-up once `hasEnoughInformation` is satisfied, and the hard stop at `VOICE_MAX_CALL_SECONDS`, both configurable and both well inside the platform duration limit
+- [x] 6.5 Handle the interruption signal: expose it to the host so it can flush buffered audio, and mark the interrupted transcript turn while keeping its full text (design D8)
+- [x] 6.6 Unit-test the session against a fake Live transport: fragments accumulate into turns, the wrap-up fires exactly once, the hard stop resolves `incomplete`, `mark_opt_out` outranks a stated `end_call` reason, `flag_minor` ends the call, and every tool call receives a result
+
+Twenty-nine tests, no network. Sections 11.1 and 11.2 were pulled forward: 6.1
+needs `medium: "voice"` to exist, so the frame addendum landed first.
+
+Two things the spike changed in the implementation:
+
+- The wrap-up cannot fire on its timer. Client content pushed while the model
+  is generating kills the socket with a 1011, so the timer sets a flag and the
+  instruction goes out on the next `turn_complete`. A test drives exactly that
+  sequence.
+- The agent does not open the call on its own. The voice frame tells it to
+  speak first, but a Live session generates nothing until something arrives, so
+  the session sends the same `(the lead has answered the phone)` cue the text
+  loop uses.
+
+`TranscriptTurn` gained an optional `interrupted` flag rather than a marker in
+the text. jsonb, no migration, and the judge still sees every word the model
+produced (design D8).
 
 ## 7. The browser microphone harness
 
@@ -174,8 +192,8 @@ than assumed:
 
 ## 11. The voice frame and the portal
 
-- [ ] 11.1 Add the `medium` input to `buildCallScript`, defaulting to `text`, and write the voice speech section into the existing fixed frame in `frame.ts` — no second prompt builder (design D7)
-- [ ] 11.2 Unit-test that text assembly is byte-identical to before, that both media carry every section 6 guardrail and the same question list, and that the voice frame orders the AI disclosure before the first question
+- [x] 11.1 Add the `medium` input to `buildCallScript`, defaulting to `text`, and write the voice speech section into the existing fixed frame in `frame.ts` — no second prompt builder (design D7)
+- [x] 11.2 Unit-test that text assembly is byte-identical to before, that both media carry every section 6 guardrail and the same question list, and that the voice frame orders the AI disclosure before the first question
 - [ ] 11.3 Add the real-call action to the lead detail: admin-only, visibly distinct from the simulated action, stating that it dials a real number, with a specific message for each refusal reason and a link to the violations view for `blocked_by_violation`
 - [ ] 11.4 Label attempts by kind wherever they are listed, showing the provider call identifier on a real attempt, and show a lead with an attempt in flight as in progress with no second call action
 

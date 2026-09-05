@@ -171,3 +171,56 @@ describe("buildCallScript", () => {
     expect(script.system).toContain("Beatriz Almeida");
   });
 });
+
+describe("the voice medium", () => {
+  const text = () => buildCallScript({ criteria: CRITERIA, language: "pt", leadName: "Ana" });
+  const voice = () => buildCallScript({ criteria: CRITERIA, language: "pt", leadName: "Ana", medium: "voice" });
+
+  it("leaves text assembly exactly as it was", () => {
+    // The default is `text`, so no existing caller sees a different prompt.
+    expect(buildCallScript({ criteria: CRITERIA, language: "pt", leadName: "Ana", medium: "text" }).system).toBe(
+      text().system,
+    );
+  });
+
+  it("adds to the frame rather than replacing it", () => {
+    // Every line the text prompt carries survives into the voice prompt, so a
+    // guardrail can never reach one medium and miss the other.
+    for (const line of text().system.split("\n")) {
+      expect(voice().system).toContain(line);
+    }
+  });
+
+  it("carries every section 6 guardrail in both media", () => {
+    for (const rule of GUARDRAIL_RULES) {
+      expect(text().system).toContain(rule);
+      expect(voice().system).toContain(rule);
+    }
+  });
+
+  it("asks the same questions in the same order in both media", () => {
+    expect(voice().order.map((c) => c.key)).toEqual(text().order.map((c) => c.key));
+    expect(voice().questionCount).toBe(text().questionCount);
+    for (const c of CRITERIA) expect(voice().system).toContain(c.questionPt);
+  });
+
+  it("tells the agent to speak first, with the disclosure before any question", () => {
+    const system = voice().system;
+    expect(system).toContain("You speak FIRST");
+    const speaksFirst = system.indexOf("You speak FIRST");
+    const questions = system.indexOf("## Questions for this call");
+    expect(speaksFirst).toBeGreaterThan(-1);
+    expect(speaksFirst).toBeLessThan(questions);
+  });
+
+  it("forbids reading a bracketed key or a tool name out loud", () => {
+    // Measured in the change 4 spike: a session with no tools declared spoke
+    // `record_answer(criterion_key="homeowner")` aloud, mid-sentence.
+    expect(voice().system).toContain("Never read out a question's bracketed key");
+    expect(text().system).not.toContain("Never read out a question's bracketed key");
+  });
+
+  it("says what to do when the lead talks over the agent", () => {
+    expect(voice().system).toContain("talks over you");
+  });
+});

@@ -17,7 +17,8 @@
   "dependencies": {
     "@google/genai": "^1.0.0",
     "@solarwave/agent": "workspace:*",
-    "@solarwave/core": "workspace:*"
+    "@solarwave/core": "workspace:*",
+    "@solarwave/scoring": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",

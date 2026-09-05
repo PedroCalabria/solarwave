@@ -244,6 +244,9 @@ importers:
       '@solarwave/core':
         specifier: workspace:*
         version: link:../core
+      '@solarwave/scoring':
+        specifier: workspace:*
+        version: link:../scoring
     devDependencies:
       '@types/node':
         specifier: ^22

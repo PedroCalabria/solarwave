@@ -29,8 +29,16 @@ export type ScoringStatus = (typeof scoringStatusEnum.enumValues)[number];
 export type EmployeeRole = (typeof employeeRoleEnum.enumValues)[number];
 export type CallLanguage = (typeof callLanguageEnum.enumValues)[number];
 
-/** A transcript turn as stored in `call_attempts.transcript`. */
-export type TranscriptTurn = { who: "ai" | "lead"; text: string; at?: string };
+/**
+ * A transcript turn as stored in `call_attempts.transcript`.
+ *
+ * `interrupted` marks an agent turn the lead talked over. The text is kept in
+ * full rather than truncated: the model produced it, so the guardrail judge
+ * must be able to see it, and nobody can say where in the sentence the audio
+ * actually stopped (voice-bridge design D8). Optional, and jsonb, so no
+ * migration and every existing row stays valid.
+ */
+export type TranscriptTurn = { who: "ai" | "lead"; text: string; at?: string; interrupted?: boolean };
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
