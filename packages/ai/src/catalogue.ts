@@ -36,7 +36,28 @@ export async function fetchCatalogue(
   }));
 }
 
-export type ModelCheck = { role: ModelRole; envVar: string; modelId: string; available: boolean };
+export type ModelCheck = {
+  role: ModelRole;
+  envVar: string;
+  modelId: string;
+  /** In the catalogue AND able to do what the role needs. */
+  available: boolean;
+  /** Set when the id exists but cannot serve this role. */
+  wrongKind?: string;
+};
+
+/**
+ * What each role actually calls.
+ *
+ * The realtime role speaks `bidiGenerateContent` and nothing else: the
+ * native-audio models do not offer `generateContent` at all, and the text
+ * models do not offer `bidiGenerateContent`. Without this, putting a text id in
+ * `AGENT_MODEL_VOICE` passes the catalogue check and fails when the phone is
+ * already ringing.
+ */
+function methodFor(role: ModelRole): string {
+  return role === "voice" ? "bidiGenerateContent" : "generateContent";
+}
 
 /**
  * Checks the configured model ids against the live catalogue. Gemini ids move
@@ -48,11 +69,23 @@ export async function checkConfiguredModels(
   fetchImpl: Fetch = globalThis.fetch,
 ): Promise<ModelCheck[]> {
   const catalogue = await fetchCatalogue(fetchImpl, env);
-  const ids = new Set(catalogue.map((m) => m.id));
+  const byId = new Map(catalogue.map((m) => [m.id, m]));
 
   return MODEL_ROLES.map((role) => {
     const modelId = requireModelId(role, env);
-    return { role, envVar: envVarFor(role), modelId, available: ids.has(modelId) };
+    const entry = byId.get(modelId);
+    const envVar = envVarFor(role);
+    if (!entry) return { role, envVar, modelId, available: false };
+
+    const needed = methodFor(role);
+    // An entry that lists no methods is taken at its word rather than rejected:
+    // the field is optional in Google's response and a missing one is not
+    // evidence of a missing capability.
+    const methods = entry.supportedGenerationMethods;
+    if (methods && methods.length > 0 && !methods.includes(needed)) {
+      return { role, envVar, modelId, available: false, wrongKind: needed };
+    }
+    return { role, envVar, modelId, available: true };
   });
 }
 
@@ -65,7 +98,11 @@ export async function assertConfiguredModels(
   const missing = checks.filter((c) => !c.available);
   if (missing.length === 0) return;
 
-  const lines = missing.map((c) => `  ${c.envVar}=${c.modelId} is not in the catalogue`);
+  const lines = missing.map((c) =>
+    c.wrongKind
+      ? `  ${c.envVar}=${c.modelId} exists but does not support ${c.wrongKind}, which the ${c.role} role needs`
+      : `  ${c.envVar}=${c.modelId} is not in the catalogue`,
+  );
   throw new Error(
     `Configured model ids are not available from Google:\n${lines.join("\n")}\n` +
       `List the current ids with:\n` +

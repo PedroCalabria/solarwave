@@ -7,6 +7,10 @@ const CATALOGUE = {
   models: [
     { name: "models/gemini-3.8-flash", supportedGenerationMethods: ["generateContent"] },
     { name: "models/gemini-3.5-flash-lite", supportedGenerationMethods: ["generateContent"] },
+    {
+      name: "models/gemini-2.5-flash-native-audio-preview-09-2025",
+      supportedGenerationMethods: ["countTokens", "bidiGenerateContent"],
+    },
   ],
 };
 
@@ -30,6 +34,7 @@ const env = (overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({
   AGENT_MODEL_CONVERSATION: "gemini-3.5-flash-lite",
   AGENT_MODEL_PERSONA: "gemini-3.5-flash-lite",
   AGENT_MODEL_LINTER: "gemini-3.5-flash-lite",
+  AGENT_MODEL_VOICE: "gemini-2.5-flash-native-audio-preview-09-2025",
   ...overrides,
 });
 
@@ -59,6 +64,11 @@ describe("requireModelId", () => {
     );
     expect(requireModelId("persona", { AGENT_MODEL_PERSONA: "gemini-3.5-flash-lite" })).toBe("gemini-3.5-flash-lite");
     expect(requireModelId("linter", { AGENT_MODEL_LINTER: "gemini-3.5-flash-lite" })).toBe("gemini-3.5-flash-lite");
+    // The realtime role reads its own variable, and the id it carries is a
+    // native-audio one rather than a text one.
+    expect(
+      requireModelId("voice", { AGENT_MODEL_VOICE: "gemini-2.5-flash-native-audio-preview-09-2025" }),
+    ).toBe("gemini-2.5-flash-native-audio-preview-09-2025");
   });
 
   it("applies the gateway-slug guard to the agent roles too", () => {
@@ -126,5 +136,32 @@ describe("assertConfiguredModels", () => {
     await expect(
       assertConfiguredModels(env(), stubFetch({}, 503)),
     ).rejects.toThrow(/HTTP 503/);
+  });
+});
+
+describe("roles need the right kind of model", () => {
+  it("rejects a text id in the realtime role", () => {
+    // The native-audio models speak only bidiGenerateContent and the text
+    // models only generateContent, so this mix-up is easy to make and would
+    // otherwise surface with the phone already ringing.
+    const promise = assertConfiguredModels(env({ AGENT_MODEL_VOICE: "gemini-3.5-flash-lite" }), stubFetch());
+    return expect(promise).rejects.toThrow(/AGENT_MODEL_VOICE.*does not support bidiGenerateContent/s);
+  });
+
+  it("rejects a realtime id in a text role", () => {
+    const promise = assertConfiguredModels(
+      env({ SCORING_MODEL_JUDGE: "gemini-2.5-flash-native-audio-preview-09-2025" }),
+      stubFetch(),
+    );
+    return expect(promise).rejects.toThrow(/SCORING_MODEL_JUDGE.*does not support generateContent/s);
+  });
+
+  it("accepts an entry that lists no methods rather than guessing", () => {
+    const catalogue = { models: [{ name: "models/mystery" }] };
+    return expect(
+      checkConfiguredModels(env({ AGENT_MODEL_VOICE: "mystery" }), stubFetch(catalogue)),
+    ).resolves.toContainEqual(
+      expect.objectContaining({ role: "voice", modelId: "mystery", available: true }),
+    );
   });
 });

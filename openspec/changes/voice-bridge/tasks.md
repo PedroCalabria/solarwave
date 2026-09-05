@@ -102,7 +102,21 @@ stopped.
 
 ## 3. Spike — Twilio reality for a Brazilian demo
 
-- [ ] 3.1 Create the Twilio trial account and establish whether a usable number can be provisioned for this demo: trial numbers are limited to the sign-up country, Brazilian local numbers require a regulatory bundle, and only verified caller IDs can be dialled. Record what is actually possible
+- [x] 3.1 Create the Twilio trial account and establish whether a usable number can be provisioned for this demo: trial numbers are limited to the sign-up country, Brazilian local numbers require a regulatory bundle, and only verified caller IDs can be dialled. Record what is actually possible
+MEASURED 2026-09-05 against the live Twilio API, with an API key rather than
+the account auth token (a deployment credential that can be revoked on its own):
+
+- Account `AC<redacted>`, status active, type **Trial**.
+- **Balance 0.00 USD.** No promotional credit is present on this account.
+- **0 phone numbers** owned and **0 verified caller IDs**, so today the account
+  can neither place a call nor be given a destination to place it to.
+- Brazil IS enabled and BR local numbers are in stock (Sao Paulo, Bauru,
+  Uberlandia), but every one carries `address_requirements=local` — the
+  regulatory address the design flagged as a risk, confirmed.
+- US local numbers carry `address_requirements=none`, so they need no bundle.
+
+The wall is the balance, not the country: nothing can be bought at 0.00 USD.
+
 - [ ] 3.2 Verify the demo destination number and place one manual test call from the console. Confirm the trial announcement's presence and length, and record how much of the two-minute budget it costs
 - [ ] 3.3 DECISION, and the one that may need the project owner: if a real call to the demo number is not possible on the trial, choose between upgrading to a paid number and demonstrating on the browser harness. Record the choice and the remaining call budget in the decision log
 - [ ] 3.4 Add the Twilio and voice environment variables to `apps/web/.env.example`, `.env.local` and the Vercel project (design migration plan); add `voice` to `MODEL_ROLES` so `assertConfiguredModels()` covers `AGENT_MODEL_VOICE`, and extend the env unit tests including the `google/`-prefix guard
