@@ -19,10 +19,19 @@ export {
   type ToolName,
 } from "./tools";
 export {
+  CallState,
+  outcomeFor,
+  readAnswer,
+  readCallbackTime,
+  readReason,
+  type CallStateInput,
+  type LiveAnswer,
+  type ToolInvocation,
+} from "./callState";
+export {
   runConversation,
   type ConversationError,
   type ConversationResult,
-  type LiveAnswer,
   type Responder,
   type RunConversationInput,
 } from "./loop";
