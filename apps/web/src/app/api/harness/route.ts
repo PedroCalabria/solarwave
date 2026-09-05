@@ -113,8 +113,12 @@ async function run(ws: WebSocket, criteria: ScriptCriterion[], language: "pt" | 
     return;
   }
 
-  ws.on("message", (data: WebSocketData, isBinary?: boolean) => {
-    if (isBinary || Buffer.isBuffer(data)) {
+  ws.on("message", (data: WebSocketData, isBinary: boolean) => {
+    // `isBinary` is the ONLY way to tell the two apart. `ws` hands over a
+    // Buffer for text frames as well, so testing `Buffer.isBuffer` classified
+    // the JSON "stop" frame as audio: the end-call button did nothing, and its
+    // bytes were fed to the model as PCM.
+    if (isBinary) {
       session?.sendAudio(samplesFrom(Buffer.from(data as Buffer)));
       return;
     }

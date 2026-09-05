@@ -49,6 +49,14 @@ type Status = "idle" | "connecting" | "live" | "ended" | "error";
 
 /** Plays agent audio in order, and can drop everything queued on a barge-in. */
 class Playback {
+  /**
+   * Scheduling headroom. Chunks arrive over a network and a socket, so lining
+   * the first one up with `currentTime` exactly means every later hiccup lands
+   * as a gap mid-sentence. A short lead-in absorbs the jitter and costs the
+   * listener a delay they cannot perceive.
+   */
+  private static readonly LEAD_IN_SECONDS = 0.12;
+
   private context: AudioContext | null = null;
   private playAt = 0;
   private sources = new Set<AudioBufferSourceNode>();
@@ -69,7 +77,7 @@ class Playback {
     source.connect(context.destination);
     // Schedule against a running cursor rather than "now", so consecutive
     // chunks butt up against each other instead of overlapping or gapping.
-    this.playAt = Math.max(this.playAt, context.currentTime);
+    this.playAt = Math.max(this.playAt, context.currentTime + Playback.LEAD_IN_SECONDS);
     source.start(this.playAt);
     this.playAt += buffer.duration;
 
@@ -220,6 +228,22 @@ export function VoiceHarness() {
     <div style={{ display: "grid", gap: "var(--space-4)" }}>
       <div style={{ background: "var(--surface-card)", borderRadius: "var(--radius-xl)", padding: 22 }}>
         <div className={styles.mono}>Microphone harness</div>
+        <p
+          style={{
+            fontSize: "var(--body-3)",
+            lineHeight: 1.55,
+            margin: "var(--space-2) 0 0",
+            padding: "10px 14px",
+            borderRadius: "var(--radius-lg, 12px)",
+            border: "1px solid var(--line-hairline)",
+            textWrap: "pretty",
+          }}
+        >
+          <strong>Wear headphones.</strong> On speakers the microphone picks the agent&rsquo;s own voice back up, and
+          because the lead talking is what interrupts it, the agent interrupts itself — turns stall, replies never
+          arrive, audio sticks. That is the harness hearing an echo, not the agent misbehaving. A real telephone call
+          has no such loop.
+        </p>
         <p style={{ fontSize: "var(--body-3)", lineHeight: 1.55, color: "var(--text-muted)", margin: "var(--space-2) 0 var(--space-3)", textWrap: "pretty" }}>
           Runs the real voice agent against your microphone: the same script, the same tools and the same timers a
           telephone call uses. It places no call and writes nothing — no attempt, no lead change, no score. It does

@@ -66,3 +66,17 @@ describe("the harness is admin-only", () => {
     expect(page).toContain('employee.role !== "admin"');
   });
 });
+
+describe("the client protocol", () => {
+  it("distinguishes text from binary by isBinary, never by Buffer", () => {
+    // `ws` hands over a Buffer for text frames too, so testing Buffer.isBuffer
+    // classified the JSON "stop" frame as audio: the end-call button did
+    // nothing and its bytes were fed to the model as PCM.
+    expect(source).not.toContain("Buffer.isBuffer(data)");
+    expect(source).toContain("if (isBinary)");
+  });
+
+  it("still handles the stop message", () => {
+    expect(source).toContain('message.type === "stop"');
+  });
+});
