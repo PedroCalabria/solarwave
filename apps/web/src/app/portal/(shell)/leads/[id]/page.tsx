@@ -1,5 +1,5 @@
 import { getDb, getLeadDetail, getSettings, isSimulated } from "@solarwave/db";
-import { isWithinCallWindow } from "@solarwave/core";
+import { isTerminal, isWithinCallWindow } from "@solarwave/core";
 import { reportStaleness } from "@solarwave/scoring";
 import { hasVoiceConfig } from "@solarwave/voice";
 import { requireEmployee } from "@/lib/auth";
@@ -85,7 +85,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       ? "This lead opted out. Contact is blocked for all future outreach, simulated included."
       : lead.status === "calling"
         ? "A call for this lead is already in flight."
-        : null;
+        : // Every terminal status refuses `dispatch`, so both controls would
+          // fail on click and neither said so. The state machine is the source
+          // of truth here rather than a second list that can drift from it.
+          isTerminal(lead.status)
+          ? `This lead reached ${STATUS[lead.status]?.label ?? lead.status}, which is final. Re-open it by re-seeding or by creating a new lead.`
+          : null;
 
   // The real call adds two refusals the simulated one has no reason to care
   // about: the call window, and telephony not being configured at all. Both are
