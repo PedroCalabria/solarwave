@@ -43,6 +43,17 @@ export const WRAP_UP_INSTRUCTION =
  */
 export const OPENING_CUE = "(the lead has answered the phone)";
 
+/**
+ * Breathing room before pushing anything at the model.
+ *
+ * MEASURED twice: client content sent right after `turnComplete` kills the
+ * socket with a 1011. The `generating` guard is derived from provider events,
+ * and the events evidently lead the model's own readiness by a little. A short
+ * wait costs a fraction of a second on the one instruction we ever inject, and
+ * the alternative is losing the call.
+ */
+const INJECTION_SETTLE_MS = 800;
+
 export type VoiceSessionEvent =
   /** Agent audio to play or forward, PCM16 at the model's output rate. */
   | { type: "audio"; pcm: Int16Array }
@@ -212,7 +223,13 @@ export async function startVoiceSession({
     if (ended || wrapUpSent || generating) return;
     wrapUpSent = true;
     wrapUpPending = false;
-    connection?.sendText(WRAP_UP_INSTRUCTION);
+    // Deliberately after a pause, and re-checked: the model may have started
+    // another turn in the meantime, and injecting into one is what kills the
+    // socket. A wrap-up that misses its moment is a longer call; a 1011 is a
+    // lost one.
+    setTimeout(() => {
+      if (!ended && !generating) connection?.sendText(WRAP_UP_INSTRUCTION);
+    }, INJECTION_SETTLE_MS);
   };
 
   /** Asks for the wrap-up, now if the model is idle, otherwise after its turn. */

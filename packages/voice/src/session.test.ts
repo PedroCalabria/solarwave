@@ -262,6 +262,7 @@ describe("the call budget", () => {
     expect(transport.sentText).toEqual([OPENING_CUE]);
 
     transport.emit({ type: "turn_complete" });
+    vi.advanceTimersByTime(1000);
     expect(transport.sentText).toEqual([OPENING_CUE, WRAP_UP_INSTRUCTION]);
   });
 
@@ -269,16 +270,16 @@ describe("the call budget", () => {
     const { transport } = await start();
     transport.emit({ type: "agent_said", text: "pergunta" });
     transport.emit({ type: "turn_complete" });
-    vi.advanceTimersByTime(DEFAULT_WRAP_UP_SECONDS * 1000);
+    vi.advanceTimersByTime(DEFAULT_WRAP_UP_SECONDS * 1000 + 1000);
     expect(transport.sentText).toEqual([OPENING_CUE, WRAP_UP_INSTRUCTION]);
   });
 
   it("injects it exactly once", async () => {
     const { transport } = await start();
     transport.emit({ type: "turn_complete" });
-    vi.advanceTimersByTime(DEFAULT_WRAP_UP_SECONDS * 1000);
+    vi.advanceTimersByTime(DEFAULT_WRAP_UP_SECONDS * 1000 + 1000);
     transport.emit({ type: "turn_complete" });
-    vi.advanceTimersByTime(DEFAULT_WRAP_UP_SECONDS * 1000);
+    vi.advanceTimersByTime(DEFAULT_WRAP_UP_SECONDS * 1000 + 1000);
     expect(transport.sentText.filter((t) => t === WRAP_UP_INSTRUCTION)).toHaveLength(1);
   });
 
@@ -286,7 +287,8 @@ describe("the call budget", () => {
     const { transport } = await start();
     answerAll(transport);
     transport.emit({ type: "turn_complete" });
-    // No timer has fired; the budget was closed by the answers, not the clock.
+    vi.advanceTimersByTime(1000);
+    // The wrap-up timer never fired; the budget was closed by the answers.
     expect(transport.sentText).toEqual([OPENING_CUE, WRAP_UP_INSTRUCTION]);
   });
 
@@ -294,6 +296,7 @@ describe("the call budget", () => {
     const { transport } = await start();
     transport.emit({ type: "tool_call", name: "record_answer", input: { criterion_key: "monthly_bill", value: "450" } });
     transport.emit({ type: "turn_complete" });
+    vi.advanceTimersByTime(1000);
     expect(transport.sentText).toEqual([OPENING_CUE]);
   });
 
@@ -323,7 +326,7 @@ describe("the call budget", () => {
   it("honours configured timers", async () => {
     const { transport, events } = await start({ wrapUpSeconds: 5, maxCallSeconds: 10 });
     transport.emit({ type: "turn_complete" });
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000 + 1000);
     expect(transport.sentText).toContain(WRAP_UP_INSTRUCTION);
     vi.advanceTimersByTime(5000);
     expect(ended(events)).toBeDefined();
