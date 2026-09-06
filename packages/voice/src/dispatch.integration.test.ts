@@ -42,6 +42,7 @@ const CONFIG: VoiceConfig = {
   streamTokenSecret: "secret",
   wrapUpSeconds: 90,
   maxCallSeconds: 180,
+  machineDetection: false,
 };
 
 async function seedLead(status: "new" | "opt_out" = "new") {
@@ -91,6 +92,25 @@ describe("dispatchCall", () => {
     // The provider hangs up even if the bridge stops enforcing the budget.
     expect(call.timeLimitSeconds).toBe(180);
     expect(call.to).toBe("+5511999990000");
+  });
+
+  it("leaves machine detection off unless the account can use it", async () => {
+    // A trial account rejects the whole request when a premium parameter is
+    // present, so this is opt-in rather than assumed.
+    await seedLead();
+    await dispatchCall({ db, leadId: LEAD_ID, config: CONFIG, placeCall, now: MIDDAY });
+    expect(placed[0]!.machineDetection).toBe(false);
+
+    await db.update(leads).set({ status: "new" }).where(eq(leads.id, LEAD_ID));
+    await db.delete(callAttempts).where(eq(callAttempts.leadId, LEAD_ID));
+    await dispatchCall({
+      db,
+      leadId: LEAD_ID,
+      config: { ...CONFIG, machineDetection: true },
+      placeCall,
+      now: MIDDAY,
+    });
+    expect(placed[1]!.machineDetection).toBe(true);
   });
 
   it("refuses outside the call window without dialling", async () => {

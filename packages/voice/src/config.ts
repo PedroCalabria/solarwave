@@ -22,6 +22,23 @@ export type VoiceConfig = {
   streamTokenSecret: string;
   wrapUpSeconds: number;
   maxCallSeconds: number;
+  /**
+   * Whether to ask Twilio to detect an answering machine.
+   *
+   * OFF by default, because answering-machine detection is a paid Twilio
+   * feature and this demo runs on a trial: sending the parameters gets the
+   * whole call rejected with "trial accounts have limited parameter access",
+   * measured 2026-09-06. Set `TWILIO_MACHINE_DETECTION=on` once the account is
+   * upgraded — the outcome mapping already reads `AnsweredBy` whenever Twilio
+   * sends it, so nothing else changes.
+   *
+   * The cost of running without it: a machine that answers is treated as a
+   * human, the conversation produces nothing usable, and the attempt ends
+   * `answered_incomplete` — which the retry policy already handles, and which
+   * is the same path a failed bridge takes. Worse than a `voicemail` outcome,
+   * but not wrong, and not silent.
+   */
+  machineDetection: boolean;
 };
 
 export const DEFAULT_WRAP_UP_SECONDS = 90;
@@ -77,6 +94,7 @@ export function readVoiceConfig(env: NodeJS.ProcessEnv = process.env):
       // like the agent ignoring its budget rather than a misconfiguration.
       wrapUpSeconds: Math.min(wrapUpSeconds, maxCallSeconds - 1),
       maxCallSeconds,
+      machineDetection: trimmed(env, "TWILIO_MACHINE_DETECTION")?.toLowerCase() === "on",
     },
   };
 }

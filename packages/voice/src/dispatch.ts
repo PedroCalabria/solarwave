@@ -49,6 +49,7 @@ export type PlaceCall = (input: {
   instructionsUrl: string;
   statusCallbackUrl: string;
   timeLimitSeconds: number;
+  machineDetection: boolean;
 }) => Promise<string>;
 
 export type DispatchCallInput = {
@@ -63,17 +64,23 @@ export type DispatchCallInput = {
 /**
  * The real Twilio call.
  *
- * Machine detection runs asynchronously so the call connects immediately and
- * the verdict arrives on the status callback (design D9). `timeLimit` is a
- * belt-and-braces stop: if the bridge stops enforcing the budget, Twilio still
- * hangs up rather than leaving a line open against a 75-minute allowance.
+ * The parameter set is deliberately small. A trial account rejects the whole
+ * request — not just the extra parameter — with "trial accounts have limited
+ * parameter access", so anything premium is opt-in rather than assumed
+ * (measured 2026-09-06).
+ *
+ * When machine detection IS available it runs asynchronously, so the call
+ * connects immediately and the verdict arrives on the status callback
+ * (design D9). `timeLimit` stays either way: if the bridge stops enforcing the
+ * budget, Twilio still hangs up rather than leaving a line open against a
+ * 75-minute allowance.
  */
 export function twilioPlaceCall(config: VoiceConfig): PlaceCall {
   const client = twilio(config.twilio.apiKeySid, config.twilio.apiKeySecret, {
     accountSid: config.twilio.accountSid,
   });
 
-  return async ({ to, from, instructionsUrl, statusCallbackUrl, timeLimitSeconds }) => {
+  return async ({ to, from, instructionsUrl, statusCallbackUrl, timeLimitSeconds, machineDetection }) => {
     const call = await client.calls.create({
       to,
       from,
@@ -81,11 +88,15 @@ export function twilioPlaceCall(config: VoiceConfig): PlaceCall {
       statusCallback: statusCallbackUrl,
       statusCallbackEvent: ["completed"],
       statusCallbackMethod: "POST",
-      machineDetection: "Enable",
-      asyncAmd: "true",
-      asyncAmdStatusCallback: statusCallbackUrl,
-      asyncAmdStatusCallbackMethod: "POST",
       timeLimit: timeLimitSeconds,
+      ...(machineDetection
+        ? {
+            machineDetection: "Enable",
+            asyncAmd: "true",
+            asyncAmdStatusCallback: statusCallbackUrl,
+            asyncAmdStatusCallbackMethod: "POST",
+          }
+        : {}),
     });
     return call.sid;
   };
@@ -143,6 +154,7 @@ export async function dispatchCall({
       instructionsUrl: `${config.publicBaseUrl}/api/twilio/voice?t=${webhookToken}`,
       statusCallbackUrl: `${config.publicBaseUrl}/api/twilio/status?t=${webhookToken}`,
       timeLimitSeconds: config.maxCallSeconds,
+      machineDetection: config.machineDetection,
     });
   } catch (error) {
     // The attempt exists and the lead is `calling`. Closing both here is what
