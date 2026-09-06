@@ -355,6 +355,65 @@ tool call that morning, was run again immediately afterwards and returned zero
 audio, zero transcription and zero tool calls, closing cleanly with 1000. The
 eval is not at fault; the account is out of realtime.
 
+## 13pre. What the first real call already proved, and what it did not
+
+Attempt 2026-09-06, call `CAaca728d0be475aa6dc91429976661c1d`, from the trial
+number to a Brazilian mobile. Twilio dialled and rang for 55 s; the handset
+never rang, and the call ended `no-answer` with `duration 0` and no charge. The
+handset side is a carrier or verification problem, not ours, and is written up
+under "before the next attempt" below.
+
+**PROVEN by that attempt, against the real Twilio:**
+
+| | |
+| --- | --- |
+| `dispatchCall` preconditions, in order, on real data | yes |
+| `createDispatchedAttempt` + `attachCallSid` | yes, attempt 2 carries the SID |
+| `calls.create` with the trial-safe parameter set | accepted |
+| The status callback reaching a tunnelled dev machine | yes |
+| The webhook's own token check on a REAL Twilio request | passed |
+| `CallStatus` to `AttemptOutcome` (`no-answer` to `no_answer`) | correct |
+| `finishAttempt`, the lifecycle transition, `attempt_count` | correct |
+| `scheduleRetry` on a real ending: attempt 2 to a 2-day retry in the lead's timezone | correct |
+
+That is design D4's central claim — the status callback is the authority on how
+an attempt ended — working with the real provider. The portal still showed the
+stale "in flight" message from the form, but the database was already right.
+
+**NOT proven, and only a connected call can prove it:**
+
+- [ ] 13pre.1 `/api/twilio/voice` returns TwiML that Twilio ACCEPTS. Ours is
+  well-formed and unit-tested, but Twilio has never fetched it
+- [ ] 13pre.2 Twilio actually upgrades `/api/media`. Our own probe did; a
+  `<Connect><Stream>` from Twilio is a different client
+- [ ] 13pre.3 The audio conversion works on a real 8 kHz mu-law stream in both
+  directions — the tests use synthetic tones, and a pitch or framing error is
+  inaudible to them and obvious on a phone
+- [ ] 13pre.4 The conversation holds over the telephone: the agent speaks first
+  with the AI disclosure, hears the lead, and records answers
+- [ ] 13pre.5 Barge-in reaches Twilio: the `clear` frame actually stops audio
+  the provider had buffered
+- [ ] 13pre.6 The mid-call transcript write happens, so a bridge that dies
+  leaves the conversation behind
+- [ ] 13pre.7 `recordSessionResult` hands the session outcome to the status
+  callback, and the callback prefers it over the line status
+- [ ] 13pre.8 Scoring runs from a real attempt and the criteria score lands in
+  the portal. NOTE: the extraction half is ALREADY proven by the simulated call
+  — 100/100 with verbatim evidence on both criteria — so what a real call adds
+  here is only that a phone transcript feeds it
+- [ ] 13pre.9 The trial announcement's length, and how much of the two-minute
+  budget it eats
+
+**Before the next attempt, and none of it is code:**
+
+- [ ] 13pre.10 Confirm the destination is a verified caller ID. The API reports
+  ZERO verified caller ids on the account, even though the console's own trial
+  panel lists the number. If the verification call itself does not arrive, the
+  Brazilian carrier is filtering the US number and no amount of code will fix it
+- [ ] 13pre.11 If the carrier is filtering: a US number cannot carry this demo.
+  The choices are a Brazilian Twilio number (regulatory bundle, review time) or
+  demonstrating on the harness
+
 ## 13. End to end, and the write-up
 
 - [x] 13.1 `pnpm build` before believing anything: it is the only check that exercises the server/client module boundary, and `@solarwave/voice` is a new barrel that a Client Component could reach. Delete `apps/web/.next` first if a previous run left a `TurbopackInternalError`

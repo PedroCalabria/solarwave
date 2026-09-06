@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./audio": "./src/audio/index.ts",
     "./dispatch": "./src/dispatch.ts",
-    "./twiml": "./src/twiml.ts"
+    "./twiml": "./src/twiml.ts",
+    "./media-session": "./src/mediaSession.ts"
   },
   "scripts": {
     "test": "vitest run",

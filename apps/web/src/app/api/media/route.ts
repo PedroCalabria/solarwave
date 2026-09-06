@@ -1,14 +1,7 @@
 import { experimental_upgradeWebSocket, type WebSocket, type WebSocketData } from "@vercel/functions";
 import { requireApiKey, requireModelId } from "@solarwave/ai";
-import type { ScriptCriterion } from "@solarwave/agent/criteria";
-import {
-  findAttemptByCallSid,
-  getDb,
-  getLeadById,
-  listActiveCriteria,
-  persistLiveTranscript,
-  recordSessionResult,
-} from "@solarwave/db";
+import { getDb, persistLiveTranscript, recordSessionResult } from "@solarwave/db";
+import { resolveStreamStart } from "@solarwave/voice/media-session";
 import {
   CallAudio,
   clearFrame,
@@ -17,7 +10,6 @@ import {
   parseTwilioFrame,
   readVoiceConfig,
   startVoiceSession,
-  verifyCallToken,
   type TwilioStart,
   type VoiceSession,
 } from "@solarwave/voice";
@@ -74,20 +66,17 @@ async function bridge(ws: WebSocket) {
   const start = async ({ callSid, streamSid: sid, token }: TwilioStart) => {
     streamSid = sid;
 
-    // Twilio does not sign the upgrade, so this token is the only lock. Checked
-    // before a model session is opened, so a forged stream costs nothing.
-    if (!verifyCallToken(token, callSid, config.streamTokenSecret).ok) return ws.close();
-
-    const db = getDb();
-    const attempt = await findAttemptByCallSid(db, callSid);
-    if (!attempt || attempt.endedAt) return ws.close();
+    // Every refusal lives in `resolveStreamStart`, which is integration-tested:
+    // a bad token, an unknown call, an attempt that already ended, a missing
+    // lead, no active criteria. All of them are checked before a paid realtime
+    // session is opened.
+    const resolved = await resolveStreamStart({ db: getDb(), config, callSid, token });
+    if (!resolved.ok) {
+      console.log(`[media] refused stream on ${callSid}: ${resolved.reason}`);
+      return ws.close();
+    }
+    const { attempt, lead, criteria } = resolved;
     attemptId = attempt.id;
-
-    const lead = await getLeadById(db, attempt.leadId);
-    if (!lead) return ws.close();
-
-    const criteria = toScriptCriteria(await listActiveCriteria(db));
-    if (criteria.length === 0) return ws.close();
 
     session = await startVoiceSession({
       transport: geminiTransport(requireApiKey()),
@@ -163,20 +152,4 @@ function base64Of(pcm: Int16Array): string {
   const bytes = Buffer.allocUnsafe(pcm.length * 2);
   for (let i = 0; i < pcm.length; i += 1) bytes.writeInt16LE(pcm[i]!, i * 2);
   return bytes.toString("base64");
-}
-
-function toScriptCriteria(rows: Awaited<ReturnType<typeof listActiveCriteria>>): ScriptCriterion[] {
-  return rows.map((c) => ({
-    key: c.key,
-    label: c.label,
-    questionPt: c.questionPt,
-    questionEn: c.questionEn,
-    type: c.type,
-    options: c.options,
-    expectedValue: c.expectedValue,
-    weight: c.weight,
-    blocking: c.blocking,
-    active: c.active,
-    sortOrder: c.sortOrder,
-  }));
 }
