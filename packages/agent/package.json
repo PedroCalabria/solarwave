@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./criteria": "./src/criteria.ts",
     "./personas": "./src/personaCatalogue.ts",
-    "./simulate": "./src/simulate.ts"
+    "./simulate": "./src/simulate.ts",
+    "./eval": "./src/eval/index.ts"
   },
   "scripts": {
     "test": "vitest run",

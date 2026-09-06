@@ -5,7 +5,7 @@ export {
   type CallLanguage,
   type ScriptCriterion,
 } from "./criteria";
-export { framePrologue, frameEpilogue, GUARDRAIL_RULES } from "./frame";
+export { framePrologue, frameEpilogue, GUARDRAIL_RULES, type CallMedium } from "./frame";
 export { buildCallScript, type BuildCallScriptInput, type CallScript } from "./script";
 export {
   TOOL_NAMES,
@@ -19,10 +19,19 @@ export {
   type ToolName,
 } from "./tools";
 export {
+  CallState,
+  outcomeFor,
+  readAnswer,
+  readCallbackTime,
+  readReason,
+  type CallStateInput,
+  type LiveAnswer,
+  type ToolInvocation,
+} from "./callState";
+export {
   runConversation,
   type ConversationError,
   type ConversationResult,
-  type LiveAnswer,
   type Responder,
   type RunConversationInput,
 } from "./loop";

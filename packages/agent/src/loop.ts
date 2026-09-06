@@ -2,16 +2,18 @@ import { generateTurn, type AiError, type LanguageModel, type ModelMessage } fro
 import {
   DEFAULT_SETTINGS,
   err,
-  hasEnoughInformation,
   ok,
   type AttemptOutcome,
   type Result,
   type ScoringSettings,
 } from "@solarwave/core";
 import type { TranscriptTurn } from "@solarwave/scoring";
+import { CallState, type LiveAnswer } from "./callState";
 import type { CallLanguage, ScriptCriterion } from "./criteria";
 import { buildCallScript } from "./script";
 import { toAiSdkTools, type EndCallReason } from "./tools";
+
+export type { LiveAnswer } from "./callState";
 
 /** Where the lead's replies come from: a scripted persona, an LLM, or a phone. */
 export type Responder = (input: {
@@ -20,9 +22,6 @@ export type Responder = (input: {
   /** What the agent just said. Empty when the turn was only tool calls. */
   agentTurn: string;
 }) => Promise<string | null>;
-
-/** What the agent recorded during the call. Advisory: extraction is the truth. */
-export type LiveAnswer = { criterionKey: string; value: string };
 
 export type ConversationResult = {
   transcript: TranscriptTurn[];
@@ -56,56 +55,6 @@ export type RunConversationInput = {
   temperature?: number;
 };
 
-/** Parsed `record_answer` input. Anything malformed is ignored, never guessed. */
-function readAnswer(input: unknown): LiveAnswer | null {
-  if (typeof input !== "object" || input === null) return null;
-  const { criterion_key: key, value } = input as { criterion_key?: unknown; value?: unknown };
-  if (typeof key !== "string" || key.length === 0) return null;
-  return { criterionKey: key, value: value === undefined || value === null ? "" : String(value) };
-}
-
-function readReason(input: unknown): EndCallReason | null {
-  if (typeof input !== "object" || input === null) return null;
-  const { reason } = input as { reason?: unknown };
-  return typeof reason === "string" ? (reason as EndCallReason) : null;
-}
-
-function readCallbackTime(input: unknown): string | null {
-  if (typeof input !== "object" || input === null) return null;
-  const { preferred_time: time } = input as { preferred_time?: unknown };
-  return typeof time === "string" && time.trim().length > 0 ? time.trim() : null;
-}
-
-/**
- * Maps how the call ended to the attempt outcome the lifecycle understands.
- *
- * `blocking_failed` maps to `answered_complete` on purpose. The weight share
- * will be low — the agent stopped asking after the blocking question — so
- * `hasEnoughInformation` would say the call was incomplete and the lead would
- * be called back. But a lead who fails a blocking criterion is disqualified
- * whatever the rest of the answers say, which is exactly what `scoreLead` does
- * with `failedBlocking`. Calling a renter a second time to confirm they still
- * rent is the outcome this mapping exists to prevent.
- */
-function outcomeFor(reason: EndCallReason, enoughInformation: boolean): AttemptOutcome {
-  switch (reason) {
-    case "opt_out":
-      return "opt_out";
-    case "minor":
-      return "minor_answered";
-    case "hostile":
-      return "abusive";
-    case "blocking_failed":
-      return "answered_complete";
-    case "enough_information":
-      return enoughInformation ? "answered_complete" : "answered_incomplete";
-    case "callback_requested":
-    case "lead_declined":
-    case "incomplete":
-      return "answered_incomplete";
-  }
-}
-
 const WRAP_UP =
   "System note: wrap up courteously on your next turn. Thank the lead, say a specialist will follow up, and call end_call.";
 
@@ -133,22 +82,15 @@ export async function runConversation({
 
   const transcript: TranscriptTurn[] = [];
   const messages: ModelMessage[] = [];
-  const liveAnswers = new Map<string, LiveAnswer>();
+  // Which tool call wins and what an ending means are transport-neutral, so
+  // they live in `CallState` and the voice session applies the same rules
+  // (voice-bridge design D3).
+  const state = new CallState({ order: script.order, settings });
 
-  let optedOut = false;
-  let minorFlagged = false;
-  let requestedCallback: string | null = null;
   let endedReason: EndCallReason | null = null;
   /** The turn the wrap-up was injected on, or null while the call is still open. */
   let wrapUpAt: number | null = null;
   let turnsUsed = 0;
-
-  const enough = () =>
-    hasEnoughInformation(
-      script.order,
-      [...liveAnswers.values()].map((a) => ({ criterionKey: a.criterionKey, value: a.value })),
-      settings.minAnsweredWeightShare,
-    );
 
   while (turnsUsed < maxTurns) {
     const turn = await generateTurn({
@@ -182,38 +124,13 @@ export async function runConversation({
     }
 
     for (const call of turn.value.toolCalls) {
-      switch (call.name) {
-        case "record_answer": {
-          const answer = readAnswer(call.input);
-          if (answer) liveAnswers.set(answer.criterionKey, answer);
-          break;
-        }
-        case "mark_opt_out":
-          optedOut = true;
-          break;
-        case "flag_minor":
-          minorFlagged = true;
-          break;
-        case "request_callback":
-          requestedCallback = readCallbackTime(call.input) ?? requestedCallback;
-          break;
-        case "end_call":
-          endedReason = readReason(call.input) ?? "incomplete";
-          break;
-      }
+      state.apply({ name: call.name, input: call.input });
     }
 
     // Opt-out outranks everything, including an unanswered blocking criterion
     // and the agent's own idea of why the call is ending (spec section 6).
-    if (optedOut) {
-      endedReason = "opt_out";
-      break;
-    }
+    endedReason = state.terminalReason();
     if (endedReason) break;
-    if (minorFlagged) {
-      endedReason = "minor";
-      break;
-    }
 
     // The wrap-up gives the agent exactly one turn to close courteously. If it
     // spends that turn on another question instead, the loop stops anyway —
@@ -223,7 +140,7 @@ export async function runConversation({
 
     // It lands one turn before the cap, or as soon as there is nothing left
     // worth asking, so the call closes instead of being cut off mid-sentence.
-    if (wrapUpAt === null && (enough() || turnsUsed >= maxTurns - 1)) {
+    if (wrapUpAt === null && (state.enoughInformation() || turnsUsed >= maxTurns - 1)) {
       messages.push({ role: "user", content: WRAP_UP });
       wrapUpAt = turnsUsed;
       continue;
@@ -246,16 +163,16 @@ export async function runConversation({
   }
 
   const cappedOut = endedReason === null;
-  const reason: EndCallReason = endedReason ?? (enough() ? "enough_information" : "incomplete");
+  const reason: EndCallReason = endedReason ?? state.reasonWhenCutOff();
 
   return ok({
     transcript,
-    outcome: outcomeFor(reason, enough()),
+    outcome: state.outcome(reason),
     endedReason: reason,
-    liveAnswers: [...liveAnswers.values()],
-    optedOut,
-    minorFlagged,
-    requestedCallback,
+    liveAnswers: state.liveAnswers,
+    optedOut: state.optedOut,
+    minorFlagged: state.minorFlagged,
+    requestedCallback: state.requestedCallback,
     turnsUsed,
     cappedOut,
   });

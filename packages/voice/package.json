@@ -1,0 +1,41 @@
+{
+  "name": "@solarwave/voice",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The realtime half of a call: the Gemini Live session, the audio conversion between telephony and model formats, and the call timers. Transport-neutral, so the Twilio bridge and the browser harness drive the same session.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./audio": "./src/audio/index.ts",
+    "./dispatch": "./src/dispatch.ts",
+    "./twiml": "./src/twiml.ts",
+    "./media-session": "./src/mediaSession.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "spike:live": "dotenv -e ../../apps/web/.env.local -- tsx src/spike/live.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "eval": "dotenv -e ../../apps/web/.env.local -- tsx src/eval/run.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "@solarwave/agent": "workspace:*",
+    "@solarwave/ai": "workspace:*",
+    "@solarwave/core": "workspace:*",
+    "@solarwave/db": "workspace:*",
+    "@solarwave/scoring": "workspace:*",
+    "twilio": "^6.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/ws": "^8.18.1",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-orm": "^0.45.2",
+    "tsx": "^4.23.13",
+    "typescript": "^5",
+    "vitest": "^4",
+    "ws": "^8.21.3"
+  }
+}

@@ -1,5 +1,5 @@
 import { callOrder, questionFor, vocabularyFor, type CallLanguage, type ScriptCriterion } from "./criteria";
-import { frameEpilogue, framePrologue } from "./frame";
+import { frameEpilogue, framePrologue, type CallMedium } from "./frame";
 
 export type CallScript = {
   /** The assembled system prompt. */
@@ -18,6 +18,13 @@ export type BuildCallScriptInput = {
   language: CallLanguage;
   /** Shown to the lead only as a name; never used to reveal scoring. */
   leadName?: string;
+  /**
+   * Where this script will be used. `voice` adds the live-call section of the
+   * frame; the criteria, the order, the guardrails and the budget are identical
+   * either way (voice-bridge design D7). Defaults to `text`, so every existing
+   * caller assembles exactly the prompt it assembled before.
+   */
+  medium?: CallMedium;
 };
 
 /**
@@ -58,7 +65,12 @@ function questionLine(criterion: ScriptCriterion, language: CallLanguage): strin
  * anywhere in the system: deactivating a criterion in the portal shortens the
  * next call, with no code change.
  */
-export function buildCallScript({ criteria, language, leadName }: BuildCallScriptInput): CallScript {
+export function buildCallScript({
+  criteria,
+  language,
+  leadName,
+  medium = "text",
+}: BuildCallScriptInput): CallScript {
   const order = callOrder(criteria);
 
   const questions =
@@ -67,7 +79,7 @@ export function buildCallScript({ criteria, language, leadName }: BuildCallScrip
       : "- (no questions are configured; greet the lead, explain a specialist will follow up, and end the call)";
 
   const system = [
-    framePrologue(language),
+    framePrologue(language, medium),
     "",
     leadName ? `The person you are calling is ${leadName}.` : "",
     leadName ? "" : "",

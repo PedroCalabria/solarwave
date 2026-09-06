@@ -1,6 +1,9 @@
 import { getDb, getLeadDetail, getSettings, isSimulated } from "@solarwave/db";
+import { isTerminal, isWithinCallWindow } from "@solarwave/core";
 import { reportStaleness } from "@solarwave/scoring";
+import { hasVoiceConfig } from "@solarwave/voice";
 import { requireEmployee } from "@/lib/auth";
+import { CallNow } from "@/components/app/CallNow";
 import { SimulateCall } from "@/components/app/SimulateCall";
 import { StalenessBanner } from "@/components/app/StalenessBanner";
 import Link from "next/link";
@@ -76,12 +79,32 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Admin-only. The action refuses these two cases itself; disabling the
   // control here just says so before the click rather than after it.
   const canSimulate = employee.role === "admin";
+  const voiceConfigured = hasVoiceConfig();
   const simulateBlocked =
     lead.status === "opt_out"
       ? "This lead opted out. Contact is blocked for all future outreach, simulated included."
       : lead.status === "calling"
         ? "A call for this lead is already in flight."
-        : null;
+        : // Every terminal status refuses `dispatch`, so both controls would
+          // fail on click and neither said so. The state machine is the source
+          // of truth here rather than a second list that can drift from it.
+          isTerminal(lead.status)
+          ? `This lead reached ${STATUS[lead.status]?.label ?? lead.status}, which is final. Re-open it by re-seeding or by creating a new lead.`
+          : null;
+
+  // The real call adds two refusals the simulated one has no reason to care
+  // about: the call window, and telephony not being configured at all. Both are
+  // enforced by `dispatchCall`; saying so here just moves the message before
+  // the click.
+  const callBlocked =
+    simulateBlocked ??
+    (!voiceConfigured
+      ? "Telephony is not configured, so no call can be placed."
+      : !isWithinCallWindow(new Date(), lead.timezone)
+        ? `It is outside the 08:00–22:00 window in ${lead.timezone}.`
+        : lead.attempts.length >= MAX_ATTEMPTS
+          ? "This lead has used every attempt allowed."
+          : null);
 
   const fields = [
     { label: "Phone", value: formatPhone(lead.phone) },
@@ -124,6 +147,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         <div className={detail.column}>
           {canSimulate ? (
             <SimulateCall leadId={lead.id} disabled={simulateBlocked !== null} note={simulateBlocked ?? undefined} />
+          ) : null}
+
+          {canSimulate ? (
+            <CallNow leadId={lead.id} disabled={callBlocked !== null} note={callBlocked ?? undefined} />
           ) : null}
 
           {staleness && lead.latestScoredAttempt ? (
@@ -343,6 +370,28 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                           >
                             simulated — no phone call was placed
                           </span>
+                        </div>
+                      ) : a.twilioCallSid ? (
+                        <div style={{ marginTop: 5, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <span
+                            className={styles.mono}
+                            style={{
+                              letterSpacing: ".08em",
+                              border: "1px solid var(--line-hairline)",
+                              borderRadius: "var(--radius-pill)",
+                              padding: "2px 9px",
+                            }}
+                          >
+                            {live ? "on the phone now" : "real call"}
+                          </span>
+                          {/* The provider's own id, so an operator can find this
+                              call in the Twilio console when something looks odd. */}
+                          <span className={styles.mono} style={{ color: "var(--text-muted)", letterSpacing: ".06em" }}>
+                            {a.twilioCallSid}
+                          </span>
+                          {a.endedReason ? (
+                            <span style={{ fontSize: "var(--body-3)", color: "var(--text-muted)" }}>{a.endedReason}</span>
+                          ) : null}
                         </div>
                       ) : a.endedReason ? (
                         <div style={{ fontSize: "var(--body-3)", lineHeight: 1.55, color: "var(--text-muted)", marginTop: 5, textWrap: "pretty" }}>

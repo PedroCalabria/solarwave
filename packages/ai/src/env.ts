@@ -10,6 +10,7 @@ export const MODEL_ROLES = [
   "conversation",
   "persona",
   "linter",
+  "voice",
 ] as const;
 export type ModelRole = (typeof MODEL_ROLES)[number];
 
@@ -27,6 +28,7 @@ const ENV_VAR: Record<ModelRole, string> = {
   conversation: "AGENT_MODEL_CONVERSATION",
   persona: "AGENT_MODEL_PERSONA",
   linter: "AGENT_MODEL_LINTER",
+  voice: "AGENT_MODEL_VOICE",
 };
 
 /** The variable `@ai-sdk/google` reads by default, sent as `x-goog-api-key`. */
