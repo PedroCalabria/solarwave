@@ -42,7 +42,7 @@ const CONFIG: VoiceConfig = {
   streamTokenSecret: "secret",
   wrapUpSeconds: 90,
   maxCallSeconds: 180,
-  machineDetection: false,
+  trialAccount: true,
 };
 
 async function seedLead(status: "new" | "opt_out" = "new") {
@@ -94,23 +94,23 @@ describe("dispatchCall", () => {
     expect(call.to).toBe("+5511999990000");
   });
 
-  it("leaves machine detection off unless the account can use it", async () => {
-    // A trial account rejects the whole request when a premium parameter is
-    // present, so this is opt-in rather than assumed.
+  it("tells the provider layer whether the account is a trial", async () => {
+    // A trial rejects the whole request when a premium parameter is present,
+    // so the parameter set is chosen from this one fact.
     await seedLead();
     await dispatchCall({ db, leadId: LEAD_ID, config: CONFIG, placeCall, now: MIDDAY });
-    expect(placed[0]!.machineDetection).toBe(false);
+    expect(placed[0]!.trialAccount).toBe(true);
 
     await db.update(leads).set({ status: "new" }).where(eq(leads.id, LEAD_ID));
     await db.delete(callAttempts).where(eq(callAttempts.leadId, LEAD_ID));
     await dispatchCall({
       db,
       leadId: LEAD_ID,
-      config: { ...CONFIG, machineDetection: true },
+      config: { ...CONFIG, trialAccount: false },
       placeCall,
       now: MIDDAY,
     });
-    expect(placed[1]!.machineDetection).toBe(true);
+    expect(placed[1]!.trialAccount).toBe(false);
   });
 
   it("refuses outside the call window without dialling", async () => {

@@ -310,6 +310,15 @@ context: |
     the generated URLs but NOT the production domain, which answers 200 and
     reaches the app. Twilio talks to production and nothing is disabled — but
     that makes the webhooks' own locks the only ones there are.
+  - MEASURED 2026-09-06: a Twilio TRIAL rejects the WHOLE call request when it
+    carries a parameter it is not entitled to, with "Invalid or disallowed
+    parameters provided". Probed with an unverified destination, so nothing was
+    placed: To, From, Url, StatusCallback and StatusCallbackEvent are accepted;
+    StatusCallbackMethod, TimeLimit, MachineDetection and AsyncAmd are refused.
+    `TWILIO_TRIAL_ACCOUNT` defaults to true and drops the refused set. Losing
+    StatusCallbackMethod costs nothing (POST is its default); losing the other
+    three costs answering-machine detection and the provider-side duration
+    limit, and both consequences are written on the flag.
   - Whether the Twilio trial announcement/verification limits force a paid
     upgrade before the demo: STILL OPEN, and answered by voice-bridge task 3.
     Trial numbers are limited to the sign-up country and Brazilian local numbers

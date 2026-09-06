@@ -49,7 +49,8 @@ export type PlaceCall = (input: {
   instructionsUrl: string;
   statusCallbackUrl: string;
   timeLimitSeconds: number;
-  machineDetection: boolean;
+  /** A trial refuses the whole request if it carries a premium parameter. */
+  trialAccount: boolean;
 }) => Promise<string>;
 
 export type DispatchCallInput = {
@@ -64,39 +65,40 @@ export type DispatchCallInput = {
 /**
  * The real Twilio call.
  *
- * The parameter set is deliberately small. A trial account rejects the whole
- * request — not just the extra parameter — with "trial accounts have limited
- * parameter access", so anything premium is opt-in rather than assumed
- * (measured 2026-09-06).
+ * The parameter set depends on what the account is entitled to, because a trial
+ * rejects the WHOLE request rather than the offending field. The measured list
+ * is on `trialAccount` in `config.ts`.
  *
- * When machine detection IS available it runs asynchronously, so the call
- * connects immediately and the verdict arrives on the status callback
- * (design D9). `timeLimit` stays either way: if the bridge stops enforcing the
- * budget, Twilio still hangs up rather than leaving a line open against a
- * 75-minute allowance.
+ * On a full account, machine detection runs asynchronously so the call connects
+ * immediately and the verdict arrives on the status callback (design D9), and
+ * `timeLimit` is a belt-and-braces stop for a bridge that stops enforcing the
+ * budget. A trial gets neither, and the status callback carries the outcome
+ * either way.
  */
 export function twilioPlaceCall(config: VoiceConfig): PlaceCall {
   const client = twilio(config.twilio.apiKeySid, config.twilio.apiKeySecret, {
     accountSid: config.twilio.accountSid,
   });
 
-  return async ({ to, from, instructionsUrl, statusCallbackUrl, timeLimitSeconds, machineDetection }) => {
+  return async ({ to, from, instructionsUrl, statusCallbackUrl, timeLimitSeconds, trialAccount }) => {
     const call = await client.calls.create({
       to,
       from,
       url: instructionsUrl,
+      // Both accepted on a trial. `statusCallbackMethod` is NOT, and POST is
+      // its default anyway, so leaving it out costs nothing.
       statusCallback: statusCallbackUrl,
       statusCallbackEvent: ["completed"],
-      statusCallbackMethod: "POST",
-      timeLimit: timeLimitSeconds,
-      ...(machineDetection
-        ? {
+      ...(trialAccount
+        ? {}
+        : {
+            statusCallbackMethod: "POST",
+            timeLimit: timeLimitSeconds,
             machineDetection: "Enable",
             asyncAmd: "true",
             asyncAmdStatusCallback: statusCallbackUrl,
             asyncAmdStatusCallbackMethod: "POST",
-          }
-        : {}),
+          }),
     });
     return call.sid;
   };
@@ -154,7 +156,7 @@ export async function dispatchCall({
       instructionsUrl: `${config.publicBaseUrl}/api/twilio/voice?t=${webhookToken}`,
       statusCallbackUrl: `${config.publicBaseUrl}/api/twilio/status?t=${webhookToken}`,
       timeLimitSeconds: config.maxCallSeconds,
-      machineDetection: config.machineDetection,
+      trialAccount: config.trialAccount,
     });
   } catch (error) {
     // The attempt exists and the lead is `calling`. Closing both here is what

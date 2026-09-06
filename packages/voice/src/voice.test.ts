@@ -55,13 +55,15 @@ describe("configuration", () => {
     expect(result.ok && result.config.wrapUpSeconds).toBe(119);
   });
 
-  it("keeps machine detection off unless it is explicitly turned on", () => {
-    const off = readVoiceConfig(FULL_ENV);
-    expect(off.ok && off.config.machineDetection).toBe(false);
-    const on = readVoiceConfig({ ...FULL_ENV, TWILIO_MACHINE_DETECTION: "on" });
-    expect(on.ok && on.config.machineDetection).toBe(true);
-    const nonsense = readVoiceConfig({ ...FULL_ENV, TWILIO_MACHINE_DETECTION: "yes please" });
-    expect(nonsense.ok && nonsense.config.machineDetection).toBe(false);
+  it("assumes a trial account until told otherwise", () => {
+    // Guessing wrong the other way is a call that never happens: a trial
+    // refuses the whole request over one premium parameter.
+    const fallback = readVoiceConfig(FULL_ENV);
+    expect(fallback.ok && fallback.config.trialAccount).toBe(true);
+    const upgraded = readVoiceConfig({ ...FULL_ENV, TWILIO_TRIAL_ACCOUNT: "false" });
+    expect(upgraded.ok && upgraded.config.trialAccount).toBe(false);
+    const nonsense = readVoiceConfig({ ...FULL_ENV, TWILIO_TRIAL_ACCOUNT: "maybe" });
+    expect(nonsense.ok && nonsense.config.trialAccount).toBe(true);
   });
 
   it("falls back on a nonsensical duration", () => {

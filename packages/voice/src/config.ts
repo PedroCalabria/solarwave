@@ -23,22 +23,35 @@ export type VoiceConfig = {
   wrapUpSeconds: number;
   maxCallSeconds: number;
   /**
-   * Whether to ask Twilio to detect an answering machine.
+   * Whether the Twilio account is a trial.
    *
-   * OFF by default, because answering-machine detection is a paid Twilio
-   * feature and this demo runs on a trial: sending the parameters gets the
-   * whole call rejected with "trial accounts have limited parameter access",
-   * measured 2026-09-06. Set `TWILIO_MACHINE_DETECTION=on` once the account is
-   * upgraded — the outcome mapping already reads `AnsweredBy` whenever Twilio
-   * sends it, so nothing else changes.
+   * A trial rejects the WHOLE call request when it carries a parameter it is
+   * not entitled to, so this is one switch over a set rather than a knob per
+   * parameter. MEASURED 2026-09-06 by probing the API with an unverified
+   * destination, which is refused either way and places nothing:
    *
-   * The cost of running without it: a machine that answers is treated as a
-   * human, the conversation produces nothing usable, and the attempt ends
-   * `answered_incomplete` — which the retry policy already handles, and which
-   * is the same path a failed bridge takes. Worse than a `voicemail` outcome,
-   * but not wrong, and not silent.
+   *   To / From / Url          accepted
+   *   StatusCallback           accepted
+   *   StatusCallbackEvent      accepted
+   *   StatusCallbackMethod     REFUSED   (POST is the default, so no loss)
+   *   TimeLimit                REFUSED
+   *   MachineDetection         REFUSED
+   *   AsyncAmd                 REFUSED
+   *
+   * Defaults to true, because that is what this project runs on and the cost
+   * of guessing wrong is a call that never happens. Set
+   * `TWILIO_TRIAL_ACCOUNT=false` after upgrading; nothing else changes, since
+   * the outcome mapping already reads `AnsweredBy` whenever Twilio sends it.
+   *
+   * What a trial call gives up, stated rather than hidden:
+   *   - No answering-machine detection. A machine is treated as a human, the
+   *     conversation produces nothing usable, and the attempt ends
+   *     `answered_incomplete` - the same path a failed bridge takes, which the
+   *     retry policy already handles.
+   *   - No provider-side duration limit. Our own hard stop is the only budget,
+   *     and the call still ends when the media socket closes.
    */
-  machineDetection: boolean;
+  trialAccount: boolean;
 };
 
 export const DEFAULT_WRAP_UP_SECONDS = 90;
@@ -94,7 +107,7 @@ export function readVoiceConfig(env: NodeJS.ProcessEnv = process.env):
       // like the agent ignoring its budget rather than a misconfiguration.
       wrapUpSeconds: Math.min(wrapUpSeconds, maxCallSeconds - 1),
       maxCallSeconds,
-      machineDetection: trimmed(env, "TWILIO_MACHINE_DETECTION")?.toLowerCase() === "on",
+      trialAccount: trimmed(env, "TWILIO_TRIAL_ACCOUNT")?.toLowerCase() !== "false",
     },
   };
 }
