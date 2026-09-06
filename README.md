@@ -167,7 +167,8 @@ publicly reachable and nothing else stands in front of them.
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / load demo data (idempotent) |
 | `pnpm eval` | Extraction and guardrail-judge eval against the real model (not in CI) |
 | `pnpm eval:agent` | Conversation agent eval: guardrail probes and persona flows (not in CI) |
-| `pnpm eval:voice` | The same guardrail probes against the realtime voice model, one session each, paced 30s apart (not in CI) |
+| `pnpm eval:voice` | The same guardrail probes against the realtime voice model, one session each (not in CI) |
+| `pnpm --filter @solarwave/voice spike:live` | One bare Gemini Live session, sharing no code with the bridge. Run it FIRST when voice misbehaves: it separates a broken bridge from an account that cannot serve a session |
 
 ## State of the build
 

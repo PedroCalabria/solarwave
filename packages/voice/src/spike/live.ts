@@ -13,7 +13,17 @@
  * Input-audio transcription is NOT covered here: it needs real speech, which
  * the browser harness (task 7) supplies. This spike sends a text turn.
  *
- * Throwaway. Delete once `packages/voice` has the real session module.
+ * It was written as a throwaway and has earned a permanent place instead. It
+ * shares no code with `session.ts`, the transport or the eval, which makes it
+ * the one thing that can tell "our bridge is broken" apart from "the account
+ * cannot serve a realtime session right now". It did exactly that twice: it
+ * returned nothing at all on an exhausted allowance, and produced 242 audio
+ * chunks the next morning on a fresh one.
+ *
+ *   pnpm --filter @solarwave/voice spike:live
+ *
+ * Reach for it FIRST whenever the voice path misbehaves. One session, and it
+ * costs a guess otherwise spent on the wrong half of the system.
  */
 
 import { GoogleGenAI, Modality, type LiveServerMessage, type Session } from "@google/genai";
