@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:workflow": "dotenv -e .env.local -- vitest run --config vitest.workflow.config.mts",
+    "test:integration": "dotenv -e .env.local -- vitest run integration.test"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.6.1",
@@ -26,6 +28,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
+    "workflow": "^4.8.5",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -33,6 +36,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@workflow/vitest": "^4.0.21",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",

@@ -398,6 +398,50 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                           {a.endedReason}
                         </div>
                       ) : null}
+
+                      {/* What the call consumed (lifecycle-and-operations D5).
+                          Nothing is shown for an attempt that recorded nothing:
+                          a zero presented as a measurement says the call
+                          happened and cost nothing, which is worse than silence.
+                          The realtime figure is labelled `observed` because it
+                          is what our bridge saw, not what the provider metered. */}
+                      {a.telephonySeconds !== null || a.realtimeSeconds !== null ? (
+                        <div
+                          className={styles.mono}
+                          style={{
+                            marginTop: 5,
+                            display: "flex",
+                            gap: 10,
+                            flexWrap: "wrap",
+                            color: "var(--text-muted)",
+                            letterSpacing: ".06em",
+                          }}
+                        >
+                          {a.telephonySeconds !== null ? <span>telephony {a.telephonySeconds}s</span> : null}
+                          {a.realtimeSeconds !== null ? <span>realtime {a.realtimeSeconds}s observed</span> : null}
+                        </div>
+                      ) : null}
+
+                      {/* What the lead asked for, and what was done with it
+                          (D6). The verbatim phrase is shown even when nothing
+                          usable resolved, so a person can always see the
+                          request beside the decision. */}
+                      {a.requestedCallbackRaw ? (
+                        <div
+                          style={{
+                            marginTop: 5,
+                            fontSize: "var(--body-3)",
+                            lineHeight: 1.55,
+                            color: "var(--text-muted)",
+                            textWrap: "pretty",
+                          }}
+                        >
+                          Asked to be called back: &ldquo;{a.requestedCallbackRaw}&rdquo; —{" "}
+                          {a.requestedCallbackAt
+                            ? `next call set to ${formatDateTime(a.requestedCallbackAt)}`
+                            : "no usable time, so the standard retry applied"}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );

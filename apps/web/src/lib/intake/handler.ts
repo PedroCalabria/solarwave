@@ -25,6 +25,17 @@ export type IntakeDeps = {
   verifyTurnstile: TurnstileVerifier;
   ipSalt: string;
   now?: () => Date;
+  /**
+   * Starts the durable run for a newly created lead
+   * (lifecycle-and-operations, spec section 4.1).
+   *
+   * Injected rather than imported so the handler stays testable without a
+   * workflow runtime, and OPTIONAL so intake keeps working when there is none.
+   * A lead that is written but never scheduled is recoverable — the daily sweep
+   * picks it up. A lead that is never written is not, so this must never be
+   * able to fail the request.
+   */
+  startLeadRun?: (leadId: string) => Promise<void>;
 };
 
 const PHONE_MESSAGES: Record<string, string> = {
@@ -102,6 +113,21 @@ export function createIntakeHandler(deps: IntakeDeps) {
     }
 
     const { status, lead } = result.value;
+
+    // Only for a lead that was actually created. A duplicate submission returns
+    // the existing lead, which already has a run — and an opted-out phone is
+    // refused a schedule by `createLeadIfNew`, so nothing here can revive it.
+    if (status === "created" && deps.startLeadRun) {
+      try {
+        await deps.startLeadRun(lead.id);
+      } catch (error) {
+        // Deliberately swallowed. The lead is in the database with a
+        // `next_call_at`; a scheduler that failed to start is a recoverable
+        // problem and losing the lead is not.
+        console.error(`[intake] could not start the run for lead ${lead.id}`, error);
+      }
+    }
+
     return json(
       {
         status,

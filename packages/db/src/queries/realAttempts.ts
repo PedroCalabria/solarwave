@@ -1,7 +1,16 @@
-import { MAX_ATTEMPTS, isTerminal, transition, type AttemptOutcome, type QualificationDecision } from "@solarwave/core";
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
+import {
+  MAX_ATTEMPTS,
+  budgetAllows,
+  isTerminal,
+  transition,
+  type AttemptOutcome,
+  type QualificationDecision,
+} from "@solarwave/core";
+import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "../client";
 import { callAttempts, guardrailViolations, leads, type CallAttempt, type Lead, type TranscriptTurn } from "../schema";
+import { getBudgetConsumption } from "./budget";
+import { getOperationsSettings } from "./settings";
 
 /**
  * Persistence for a REAL telephone attempt (voice-bridge design D6).
@@ -29,16 +38,35 @@ const TRANSCRIPT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
  */
 export const STALE_ATTEMPT_MARGIN_MS = 5 * 60 * 1000;
 
+/**
+ * The global lock every budget decision is taken under. An arbitrary constant;
+ * it only has to be stable and not collide with another advisory lock in this
+ * database, and this project takes no others.
+ */
+const BUDGET_LOCK_KEY = 8_675_309;
+
 export type DispatchRefusal =
   | "lead_not_found"
   | "opted_out"
   | "attempt_in_flight"
   | "attempt_cap_reached"
-  | "blocked_by_violation";
+  | "blocked_by_violation"
+  | "auto_dispatch_disabled"
+  | "budget_exhausted";
+
+/**
+ * Who asked for this call (lifecycle-and-operations D4).
+ *
+ * The distinction exists for exactly one rule: `auto_dispatch_enabled` gates
+ * the durable run and never an administrator. The budgets bind both, because
+ * the way the realtime allowance was actually exhausted in change 4 was a
+ * person opening roughly forty sessions in a day.
+ */
+export type DispatchOrigin = "run" | "human";
 
 export type CreateDispatchedAttemptResult =
   | { ok: true; attempt: CallAttempt; attemptNumber: number; lead: Lead }
-  | { ok: false; reason: DispatchRefusal };
+  | { ok: false; reason: DispatchRefusal; detail?: string };
 
 /**
  * Reserves the attempt a call is about to produce, and moves the lead to
@@ -55,15 +83,24 @@ export type CreateDispatchedAttemptResult =
  */
 export async function createDispatchedAttempt(
   db: Db,
-  input: { leadId: string; scheduledAt?: Date; now?: Date },
+  input: { leadId: string; scheduledAt?: Date; now?: Date; origin?: DispatchOrigin },
 ): Promise<CreateDispatchedAttemptResult> {
   const now = input.now ?? new Date();
+  const origin: DispatchOrigin = input.origin ?? "human";
 
   return db.transaction(async (tx) => {
     const [lead] = await tx.select().from(leads).where(eq(leads.id, input.leadId)).for("update");
     if (!lead) return { ok: false, reason: "lead_not_found" };
     // Spec section 6: opt-out is terminal and outranks everything.
     if (lead.status === "opt_out") return { ok: false, reason: "opted_out" };
+
+    // The operational envelope, read inside the transaction that reserves the
+    // attempt. Reading it outside would be a race, and this race places a
+    // telephone call that cannot be recalled.
+    const operations = await getOperationsSettings(tx);
+    if (origin === "run" && !operations.autoDispatchEnabled) {
+      return { ok: false, reason: "auto_dispatch_disabled" };
+    }
 
     const [inFlight] = await tx
       .select({ id: callAttempts.id })
@@ -97,6 +134,35 @@ export async function createDispatchedAttempt(
       )
       .limit(1);
     if (blocking) return { ok: false, reason: "blocked_by_violation" };
+
+    // Last of the refusals, and the only one that costs two aggregate queries:
+    // the per-lead checks above are cheaper and would refuse anyway.
+    //
+    // MEASURED, and the reason for the advisory lock: every other refusal here
+    // is safe because it is per-lead, and the `FOR UPDATE` above serialises two
+    // dispatches for the SAME lead. The budget is a GLOBAL aggregate, so two
+    // dispatches for DIFFERENT leads lock different rows, never serialise, both
+    // read the same count and both pass — classic write skew. The integration
+    // test caught exactly that: two simultaneous dispatches went through the
+    // last unit of budget.
+    //
+    // The lock is transaction-scoped, so it is released on commit or rollback
+    // with nothing to clean up, and it is taken LAST so it is held for as
+    // little as possible. No deadlock is possible: lead row locks are disjoint
+    // between concurrent dispatches, and this single global resource is always
+    // acquired after them. Dispatch is a low-frequency operation — a demo
+    // places a handful of calls a minute — so serialising it globally costs
+    // nothing worth measuring.
+    await tx.execute(sql`select pg_advisory_xact_lock(${BUDGET_LOCK_KEY})`);
+
+    const verdict = budgetAllows(await getBudgetConsumption(tx, now), operations);
+    if (!verdict.fits) {
+      return {
+        ok: false,
+        reason: "budget_exhausted",
+        detail: `${verdict.budget}: ${verdict.used}/${verdict.limit}`,
+      };
+    }
 
     const next = transition(lead.status, { type: "dispatch" });
     if (!next.ok) {
@@ -165,6 +231,15 @@ export type FinishAttemptInput = {
   decision?: QualificationDecision;
   /** Applied when the transition schedules another attempt. */
   nextCallAt?: Date | null;
+  /**
+   * What the call consumed (lifecycle-and-operations D5). Telephony seconds
+   * come from the provider's own report on the status callback; realtime
+   * seconds are what the media session observed. Either may be absent, and
+   * absent is recorded as absent rather than as a zero that reads like a
+   * measurement.
+   */
+  telephonySeconds?: number | null;
+  realtimeSeconds?: number | null;
 };
 
 export type FinishAttemptResult =
@@ -211,6 +286,11 @@ export async function finishAttempt(db: Db, input: FinishAttemptInput): Promise<
         // have written a better one than a callback that saw nothing.
         ...(input.transcript ? { transcript: input.transcript, transcriptExpiresAt: expiryFor(endedAt) } : {}),
         ...(attempt.transcript && !input.transcript ? { transcriptExpiresAt: expiryFor(endedAt) } : {}),
+        // Same rule for consumption: only written when supplied, so a
+        // reconciliation that knows nothing does not overwrite what the bridge
+        // or the provider already reported.
+        ...(input.telephonySeconds != null ? { telephonySeconds: input.telephonySeconds } : {}),
+        ...(input.realtimeSeconds != null ? { realtimeSeconds: input.realtimeSeconds } : {}),
         updatedAt: endedAt,
       })
       .where(eq(callAttempts.id, input.attemptId))
@@ -306,7 +386,17 @@ function expiryFor(endedAt: Date): Date {
 export async function recordSessionResult(
   db: DbOrTx,
   attemptId: string,
-  input: { outcome: AttemptOutcome; endedReason: string; transcript?: TranscriptTurn[] },
+  input: {
+    outcome: AttemptOutcome;
+    endedReason: string;
+    transcript?: TranscriptTurn[];
+    /**
+     * How long the realtime session actually held its provider connection
+     * (lifecycle-and-operations D5). Observed by the bridge, not metered by the
+     * provider, and the portal says so.
+     */
+    realtimeSeconds?: number | null;
+  },
 ): Promise<void> {
   await db
     .update(callAttempts)
@@ -314,6 +404,7 @@ export async function recordSessionResult(
       outcome: input.outcome,
       endedReason: input.endedReason,
       ...(input.transcript ? { transcript: input.transcript } : {}),
+      ...(input.realtimeSeconds != null ? { realtimeSeconds: input.realtimeSeconds } : {}),
       updatedAt: new Date(),
     })
     .where(and(eq(callAttempts.id, attemptId), isNull(callAttempts.endedAt)));

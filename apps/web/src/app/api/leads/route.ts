@@ -1,5 +1,6 @@
 import { getDb } from "@solarwave/db";
 import { createIntakeHandler } from "@/lib/intake/handler";
+import { startLeadRun } from "@/lib/leadRun";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 
 /**
@@ -12,6 +13,9 @@ export async function POST(request: Request) {
     db: getDb(),
     verifyTurnstile: verifyTurnstileToken,
     ipSalt: process.env.INTAKE_IP_SALT ?? "solarwave",
+    // Spec section 4.1: intake schedules the first attempt. Until now that meant
+    // writing `next_call_at` and hoping someone pressed a button.
+    startLeadRun: async (leadId) => void (await startLeadRun(leadId)),
   });
   return handler(request);
 }

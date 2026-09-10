@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-09-06
+goal: "Make the system run itself: a durable per-lead workflow that dispatches
+  and retries within the call window, a lead-requested callback that actually
+  reschedules, one daily maintenance job, an audited dispatch budget that
+  defaults to off, and a portal that shows a call happening."

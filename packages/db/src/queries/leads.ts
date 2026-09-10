@@ -138,3 +138,15 @@ export async function listAnswersForAttempt(db: DbOrTx, callAttemptId: string): 
     .orderBy(asc(qualificationCriteria.sortOrder));
   return rows.map((r) => ({ ...r.answer, criterion: r.criterion }));
 }
+
+/**
+ * Records which durable run is scheduling this lead
+ * (lifecycle-and-operations D9).
+ *
+ * Observability only. Mutual exclusion is `createDispatchedAttempt`'s row lock,
+ * never this column, so this deliberately overwrites rather than refusing when
+ * one is already set: a restarted run is the newer truth.
+ */
+export async function setWorkflowRunId(db: DbOrTx, leadId: string, runId: string): Promise<void> {
+  await db.update(leads).set({ workflowRunId: runId, updatedAt: new Date() }).where(eq(leads.id, leadId));
+}

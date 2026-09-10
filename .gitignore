@@ -8,3 +8,13 @@ dist/
 .vercel
 .env*
 !.env.example
+
+# Workflow SDK local world. MEASURED: this version writes to
+# apps/web/.next/workflow-data, already covered by .next/ above. The entry
+# below is the documented default, kept in case the location moves back.
+.workflow-data/
+# Bundle built by the Workflow SDK's Vitest plugin.
+.workflow-vitest/
+
+# Portfolio captures (scripts/shots.mjs).
+shots/

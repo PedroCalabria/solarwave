@@ -39,6 +39,8 @@ export async function POST(request: Request) {
     sessionOutcome: attempt.outcome,
   });
 
+  const telephonySeconds = parseDurationSeconds(params.CallDuration);
+
   const lead = await getLeadById(db, attempt.leadId);
   const retry = lead
     ? scheduleRetry({ attemptNumber: attempt.attemptNumber, endedAt: new Date(), tz: lead.timezone })
@@ -49,6 +51,11 @@ export async function POST(request: Request) {
     outcome,
     endedReason: attempt.endedReason ?? status,
     ...(retry ? { nextCallAt: retry } : {}),
+    // What the call consumed, so the dispatch budgets have something to measure
+    // (lifecycle-and-operations D5). Twilio reports `CallDuration` in whole
+    // seconds on a completed call and omits it otherwise; an unparseable or
+    // missing value records nothing rather than a zero.
+    ...(telephonySeconds !== null ? { telephonySeconds } : {}),
   });
 
   if (!closed.ok) {
@@ -72,3 +79,15 @@ export async function POST(request: Request) {
 
 /** Statuses that end a call. `completed` is handled alongside them. */
 const TERMINAL = new Set(["completed", "busy", "failed", "no-answer", "canceled"]);
+
+/**
+ * `CallDuration` as Twilio sends it: whole seconds in a string, present on a
+ * completed call and absent on one that never connected. Anything that is not
+ * a non-negative integer is treated as absent, because a budget that silently
+ * counts `NaN` as zero is a budget that stops braking.
+ */
+function parseDurationSeconds(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const seconds = Number(raw);
+  return Number.isInteger(seconds) && seconds >= 0 ? seconds : null;
+}

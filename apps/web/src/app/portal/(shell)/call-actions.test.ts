@@ -22,6 +22,8 @@ const REASONS: DispatchRefusal[] = [
   "outside_call_window",
   "no_active_criteria",
   "not_configured",
+  "auto_dispatch_disabled",
+  "budget_exhausted",
 ];
 
 describe("the real-call action", () => {

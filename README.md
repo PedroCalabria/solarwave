@@ -86,9 +86,10 @@ The seed creates two Supabase Auth users (`lucas.prado@soltera.com` as admin,
 `SEED_EMPLOYEE_PASSWORD` (default `solarwave-demo-2026`). Without the Supabase
 variables the seed still runs against plain Postgres, but nobody can sign in.
 
-Supabase free-tier projects pause after a week without traffic. Until the
-keep-alive cron lands (lifecycle change), restore a paused project from the
-Supabase dashboard (*Project → Restore*) before a demo.
+Supabase free-tier projects pause after a week without traffic. Until the daily
+maintenance job lands (`lifecycle-and-operations` — its own database access is
+what keeps the project awake, so there is no separate keep-alive job), restore a
+paused project from the Supabase dashboard (*Project → Restore*) before a demo.
 
 ### The voice bridge locally
 
@@ -146,7 +147,9 @@ publicly reachable and nothing else stands in front of them.
 | `/portal/criteria` | Qualification criteria, call order preview and scoring settings (admin edits, agents read) |
 | `/portal/audit` | Criteria and settings audit history |
 | `/portal/harness` | Voice harness: the realtime agent on your microphone (admin only) |
-| `POST /api/leads` | Intake API |
+| `/portal/operations` | Automatic dispatch, the call budgets and what they have spent (admin edits, agents read) |
+| `POST /api/leads` | Intake API — also starts the lead's scheduling run |
+| `GET/POST /api/cron/maintenance` | Daily job behind `CRON_SECRET`: transcript purge, stale-attempt recovery, scoring recovery, overdue sweep |
 | `POST /api/internal/call` | Places a real call (shared secret) |
 | `POST /api/twilio/voice` | Call instructions: connects the media stream |
 | `POST /api/twilio/status` | Status callback: closes the attempt and hands it to scoring |
@@ -162,12 +165,15 @@ publicly reachable and nothing else stands in front of them.
 | `pnpm typecheck` / `pnpm lint` | Every workspace |
 | `pnpm build` | Next.js production build — the only check that exercises the server/client module boundary |
 | `pnpm test` | Unit tests in every workspace (web and db integration tests run when `DATABASE_URL` is set) |
+| `pnpm --filter web test:integration` | Web integration tests through `.env.local`. NOTE: this TRUNCATES the database — run `pnpm db:seed` afterwards |
+| `pnpm --filter web test:workflow` | Workflow orchestration tests. Currently skipped: see "the scheduler" below |
 | `pnpm --filter @solarwave/db test:integration` | Database tests through `.env.local` |
 | `pnpm db:generate` | New Drizzle migration from `packages/db/src/schema.ts` |
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / load demo data (idempotent) |
 | `pnpm eval` | Extraction and guardrail-judge eval against the real model (not in CI) |
 | `pnpm eval:agent` | Conversation agent eval: guardrail probes and persona flows (not in CI) |
 | `pnpm eval:voice` | The same guardrail probes against the realtime voice model, one session each (not in CI) |
+| `pnpm shots` | Portfolio captures: boots its own dev server on :3210, writes retina PNGs of every screen to `shots/` plus a contact sheet at `shots/index.html`. Run `pnpm db:seed` first — an integration suite leaves the database empty, which photographs as a working app with nothing in it |
 | `pnpm --filter @solarwave/voice spike:live` | One bare Gemini Live session, sharing no code with the bridge. Run it FIRST when voice misbehaves: it separates a broken bridge from an account that cannot serve a session |
 
 ## State of the build
@@ -215,7 +221,10 @@ Done in the `conversation-agent-text` change:
   scores it. Closes conversation → transcript → extraction → score → narrative →
   judge with no telephony.
 
-Built in the `voice-bridge` change, and NOT yet proven on a telephone:
+Built in the `voice-bridge` change, and NOT yet proven on a telephone. That
+change archived as SOFTWARE and not as telephony: the code is complete and
+twenty-four of its tasks were external measurements, which moved to
+`real-call-proof` (change 6, deferred to the end of development):
 
 - **A realtime session** (`packages/voice`) driving the same assembled script
   and the same tool contract over Gemini Live: transcript from input and output
@@ -238,7 +247,7 @@ Built in the `voice-bridge` change, and NOT yet proven on a telephone:
   against the model that actually speaks rather than the text one.
 
 **No real telephone call has been placed yet.** Two things stand in the way, and
-both are written up in `openspec/changes/voice-bridge/tasks.md`:
+both are written up in `openspec/changes/real-call-proof/`:
 
 1. **The realtime session is intermittent** (section 7b). Measured with no audio
    involved at all: sessions opened in quick succession on the Gemini free tier
@@ -248,7 +257,50 @@ both are written up in `openspec/changes/voice-bridge/tasks.md`:
 2. **Twilio has no usable number on the account** as far as its API reports,
    and no verified caller ID, though the console's own trial panel places calls.
 
-Still not built: the lifecycle workflow that schedules and retries calls
-(`leadWorkflow`), the transcript purge and the Supabase keep-alive crons. Intake
-records `next_call_at`, but nothing dispatches from it — a call is placed only
-by an admin pressing the button.
+Built in the `lifecycle-and-operations` change — the system now runs itself:
+
+- **`leadWorkflow`**, a durable per-lead run on the Workflow SDK. Intake starts
+  it; it sleeps until `next_call_at`, dispatches through the same `dispatchCall`
+  an admin uses, waits out the call and reads the lead again. It uses no hooks
+  and **writes no lifecycle state**: the status callback still says how an
+  attempt ended and scoring still says whether the lead qualified. Switch it off
+  and the system is exactly what it was.
+- **The brake, and it ships off.** `auto_dispatch_enabled` (default **false**)
+  gates the scheduler only; a daily call budget and a monthly voice-second
+  budget gate everyone, an admin included — because the way the Gemini
+  allowance was actually exhausted was a person clicking. All three are audited
+  settings, so turning automation on has a name and a timestamp on it.
+- **Cost per call** in the two currencies that run out: telephony seconds from
+  the provider, and realtime seconds as *observed* by the bridge. Simulated
+  calls count against neither.
+- **A lead-requested callback that reschedules.** The phrase is stored verbatim,
+  the extraction pass that already reads every transcript resolves it to a local
+  wall clock, and scoring applies it — bounded to the future, a horizon and
+  the 08:00–22:00 window, and never for a terminal or opted-out lead.
+- **One daily job** at `/api/cron/maintenance`: purge transcripts past their
+  twelve-month expiry, close attempts a lost status callback abandoned, re-drive
+  scoring that never finished, and sweep leads overdue by more than an hour. Its
+  own database access is the Supabase keep-alive, so there is no separate job.
+- **A dashboard that updates during a call**, by polling. Supabase Realtime was
+  measured and rejected: the `supabase_realtime` publication is empty, RLS is
+  disabled on every table with zero policies, and publishing `leads` would push
+  names, emails and telephone numbers to anyone holding the public anon key.
+
+Unlike the media bridge, the scheduler puts **no constraint on local
+development** — measured under both `pnpm dev` and `pnpm dev:voice`. One
+caveat: local run state lives in `apps/web/.next/workflow-data`, so
+`rm -rf .next` destroys sleeping runs.
+
+The workflow ORCHESTRATION tests are skipped, and honestly so: `@workflow/vitest`
+cannot run here because a transitive dependency imports JSON without Node 22's
+required import attribute, so every step enqueue fails. The steps themselves are
+covered against real Postgres; what stays unproven is the loop's internal
+ordering. It affects only the test runtime, not the product.
+
+Still not built: nothing in the pipeline. What remains is `real-call-proof`
+(change 6) — the twelve claims that only a connected telephone can settle.
+
+A standing constraint on all of it: this demonstration incurs **no execution
+costs**. No paid Gemini realtime tier, no paid Twilio number, no Brazilian
+regulatory bundle. Where a free tier cannot carry a feature, this README says so
+rather than implying otherwise.

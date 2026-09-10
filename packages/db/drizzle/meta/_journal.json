@@ -15,6 +15,13 @@
       "when": 1788570447216,
       "tag": "0001_fuzzy_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788673438952,
+      "tag": "0002_nebulous_iron_man",
+      "breakpoints": true
     }
   ]
 }

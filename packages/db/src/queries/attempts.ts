@@ -84,6 +84,18 @@ export type SaveScoringInput = {
   icebreaker: string | null;
   /** Applied under the row lock. Omitted when re-scoring a lead that already moved. */
   event?: LeadEvent;
+  /**
+   * What the lead said when asking to be called back, and what it resolved to
+   * (lifecycle-and-operations D6). Stored on the attempt whether or not it is
+   * acted on, so a person can see the request beside what happened to it.
+   */
+  requestedCallback?: { said: string; at: Date | null } | null;
+  /**
+   * The retry time the requested callback produced, already validated and
+   * window-clamped by the caller. Applied ONLY to a lead that is still
+   * callable: the terminal and opt-out branches below run first and win.
+   */
+  callbackNextCallAt?: Date | null;
 };
 
 export type SaveScoringResult =
@@ -152,7 +164,17 @@ export async function saveScoringResult(db: Db, input: SaveScoringInput): Promis
 
     await tx
       .update(callAttempts)
-      .set({ scoringStatus: "done", scoredAt: now, updatedAt: now })
+      .set({
+        scoringStatus: "done",
+        scoredAt: now,
+        ...(input.requestedCallback !== undefined
+          ? {
+              requestedCallbackRaw: input.requestedCallback?.said || null,
+              requestedCallbackAt: input.requestedCallback?.at ?? null,
+            }
+          : {}),
+        updatedAt: now,
+      })
       .where(eq(callAttempts.id, input.attemptId));
 
     const leadPatch: Partial<Lead> = {
@@ -168,6 +190,12 @@ export async function saveScoringResult(db: Db, input: SaveScoringInput): Promis
       leadPatch.nextCallAt = null;
     } else if (isTerminal(nextStatus)) {
       leadPatch.nextCallAt = null;
+    } else if (input.callbackNextCallAt) {
+      // Last, and only for a lead that is still callable. Spec section 6 puts
+      // opt-out above everything the lead said earlier in the same call, so a
+      // request to be called back can never outrank it — and the two branches
+      // above are what guarantee that, under the same row lock.
+      leadPatch.nextCallAt = input.callbackNextCallAt;
     }
 
     const [updated] = await tx.update(leads).set(leadPatch).where(eq(leads.id, input.leadId)).returning();

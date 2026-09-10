@@ -1,6 +1,13 @@
-import { dddToTimezone, evaluateAnswer, scoreLead, type ScoringAnswer, type ScoringCriterion } from "@solarwave/core";
+import {
+  DEFAULT_OPERATIONS_SETTINGS,
+  dddToTimezone,
+  evaluateAnswer,
+  scoreLead,
+  type ScoringAnswer,
+  type ScoringCriterion,
+} from "@solarwave/core";
 import { createClient } from "@supabase/supabase-js";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createStandaloneDb, type Db, type Tx } from "../client";
@@ -149,6 +156,21 @@ export async function seed(db: Db): Promise<void> {
         .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
     }
 
+    // Operational settings, and note the DIFFERENT conflict clause: these are
+    // an operator's decisions, not demo data. Re-seeding must plant the default
+    // when the row is missing and must never overwrite a budget someone raised
+    // or a switch someone deliberately flipped (lifecycle-and-operations D4).
+    for (const [key, value] of [
+      [SETTING_KEYS.autoDispatchEnabled, DEFAULT_OPERATIONS_SETTINGS.autoDispatchEnabled],
+      [SETTING_KEYS.dailyCallBudget, DEFAULT_OPERATIONS_SETTINGS.dailyCallBudget],
+      [SETTING_KEYS.monthlyVoiceSecondsBudget, DEFAULT_OPERATIONS_SETTINGS.monthlyVoiceSecondsBudget],
+    ] as const) {
+      await tx
+        .insert(settings)
+        .values({ key, value, updatedBy: empId(employeeId(1)) })
+        .onConflictDoNothing({ target: settings.key });
+    }
+
     // Criteria
     for (const c of CRITERIA) {
       await tx
@@ -200,6 +222,15 @@ export async function seed(db: Db): Promise<void> {
         const result = scoreLead({ criteria: scoringCriteria, answers, settings: SETTINGS });
         if (result.ok) score = result.value.score;
       }
+
+      // The upsert below conflicts on `id`, but the constraint that actually
+      // fires is the UNIQUE on `phone` — so a row holding a demo phone under a
+      // different id makes the whole seed fail. That is not hypothetical: the
+      // integration suites leave a lead behind, and re-seeding afterwards is
+      // exactly what the README tells you to do. Clearing the demo phone first
+      // is what makes `pnpm db:seed` idempotent as documented. It only ever
+      // touches a phone number that belongs to the demo data.
+      await tx.delete(leads).where(and(eq(leads.phone, lead.phone), ne(leads.id, leadId(lead.n))));
 
       await tx
         .insert(leads)

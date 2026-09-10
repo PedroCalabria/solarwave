@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-09-06
+goal: "Prove the voice path on a real telephone: a Twilio number and verified
+  caller ID, a Gemini realtime allowance that sustains a call, and the twelve
+  claims about a connected call that only a connected call can settle."

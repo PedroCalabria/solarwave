@@ -1,8 +1,9 @@
 import { fakeStructuredModel } from "@solarwave/ai";
+import { localToInstant } from "@solarwave/core";
 import { describe, expect, it } from "vitest";
-import { extractAnswers } from "./extract";
-import { buildExtractionSchema } from "./extractionSchema";
-import { GOLDEN_CASES, GOLDEN_CRITERIA, GOLDEN_TRANSCRIPTS, gradeExtraction } from "./fixtures";
+import { extractAnswers, extractCall } from "./extract";
+import { CALLBACK_KEY, buildExtractionSchema } from "./extractionSchema";
+import { CALLBACK_CASES, GOLDEN_CASES, GOLDEN_CRITERIA, GOLDEN_TRANSCRIPTS, gradeExtraction } from "./fixtures";
 import { isVerbatim } from "./transcript";
 
 describe("golden fixtures", () => {
@@ -107,3 +108,64 @@ describe("the golden set runs through the extractor on mocks", () => {
     expect(scores.every((s) => s.correct === 1)).toBe(true);
   });
 });
+
+describe("the callback golden cases", () => {
+  it("cover a resolvable time, an unresolvable one and no request at all", () => {
+    // The three shapes the policy has to tell apart. A set that only contains
+    // the easy one would grade the eval as perfect while the interesting cases
+    // went untested.
+    expect(CALLBACK_CASES.map((c) => c.expectedLocal)).toEqual(["2026-09-07T09:00", null, null]);
+    expect(CALLBACK_CASES.filter((c) => c.saidContains !== "")).toHaveLength(2);
+  });
+
+  it("resolves the local wall clock the model returns into the right instant", async () => {
+    const golden = CALLBACK_CASES[0]!;
+    const endedAt = localToInstant(parseLocal(golden.endedAtLocal), golden.timezone);
+
+    const result = await extractCall({
+      criteria: GOLDEN_CRITERIA,
+      transcript: golden.transcript,
+      callback: { timezone: golden.timezone, endedAt },
+      model: fakeStructuredModel({
+        ...Object.fromEntries(
+          GOLDEN_CRITERIA.filter((c) => c.active).map((c) => [c.key, { value: null, confidence: 0, evidence: "" }]),
+        ),
+        [CALLBACK_KEY]: { said: "Me liga amanhã de manhã, umas nove horas.", local_datetime: golden.expectedLocal },
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.callback?.said).toContain(golden.saidContains);
+    expect(result.value.callback?.at).toEqual(localToInstant(parseLocal(golden.expectedLocal!), golden.timezone));
+  });
+
+  it("keeps the words and no instant for a phrase that cannot be placed", async () => {
+    const golden = CALLBACK_CASES[1]!;
+    const endedAt = localToInstant(parseLocal(golden.endedAtLocal), golden.timezone);
+
+    const result = await extractCall({
+      criteria: GOLDEN_CRITERIA,
+      transcript: golden.transcript,
+      callback: { timezone: golden.timezone, endedAt },
+      model: fakeStructuredModel({
+        ...Object.fromEntries(
+          GOLDEN_CRITERIA.filter((c) => c.active).map((c) => [c.key, { value: null, confidence: 0, evidence: "" }]),
+        ),
+        [CALLBACK_KEY]: { said: "me liga qualquer hora dessas", local_datetime: null },
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.callback?.said).toContain(golden.saidContains);
+    expect(result.value.callback?.at).toBeNull();
+  });
+});
+
+function parseLocal(value: string) {
+  const [date, time] = value.split("T") as [string, string];
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  const [hour, minute] = time.split(":").map(Number) as [number, number];
+  return { year, month, day, hour, minute };
+}

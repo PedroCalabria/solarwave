@@ -2,6 +2,8 @@ import type { LanguageModel } from "@solarwave/ai";
 import {
   evaluateAnswer,
   isTerminal,
+  resolveRequestedCallback,
+  scheduleRetry,
   scoreLead,
   type LeadEvent,
   type RuleError,
@@ -21,7 +23,7 @@ import {
   type Db,
   type TranscriptTurn,
 } from "@solarwave/db";
-import { extractAnswers, type ExtractedAnswer } from "./extract";
+import { extractCall, type ExtractedAnswer } from "./extract";
 import { generateNarrative, type CallLanguage } from "./narrative";
 import { blocksOutreach } from "./guardrails";
 import { judgeTranscript, type Finding } from "./judge";
@@ -161,11 +163,16 @@ export async function scoreAttempt(deps: ScoringDeps, attemptId: string): Promis
 
   await setScoringStatus(deps.db, attemptId, "running");
 
-  const extracted = await extractAnswers({
+  // The callback context rides the SAME model call as the criteria answers
+  // (lifecycle-and-operations D6). `ended_at` is what "tomorrow" is relative
+  // to; an attempt still open has none, and then no callback is asked for.
+  const endedAt = loaded.attempt.endedAt;
+  const extracted = await extractCall({
     criteria: toExtractionCriteria(loaded.criteria),
     transcript,
     model: deps.extractionModel,
     maxRetries: deps.maxRetries,
+    ...(endedAt ? { callback: { timezone: loaded.lead.timezone, endedAt } } : {}),
   });
 
   if (!extracted.ok) {
@@ -183,14 +190,16 @@ export async function scoreAttempt(deps: ScoringDeps, attemptId: string): Promis
     return { status: "failed", message: extracted.error.error.message };
   }
 
-  const { rows, errors } = toAnswerRows(extracted.value, loaded.criteria);
+  const { answers: extractedAnswers, callback: requestedCallback } = extracted.value;
+
+  const { rows, errors } = toAnswerRows(extractedAnswers, loaded.criteria);
   if (errors.length > 0) {
     await setScoringStatus(deps.db, attemptId, "pending");
     return { status: "invalid", reason: "invalid_criteria", errors };
   }
 
   const settings = await getSettings(deps.db);
-  const answers: ScoringAnswer[] = extracted.value.map((a) => ({ criterionKey: a.criterionKey, value: a.value }));
+  const answers: ScoringAnswer[] = extractedAnswers.map((a) => ({ criterionKey: a.criterionKey, value: a.value }));
   const scored = scoreLead({ criteria: toScoringCriteria(loaded.criteria), answers, settings });
   if (!scored.ok) {
     await setScoringStatus(deps.db, attemptId, "pending");
@@ -226,7 +235,7 @@ export async function scoreAttempt(deps: ScoringDeps, attemptId: string): Promis
     leadName: loaded.lead.name,
     labels,
     score: scored.value,
-    answers: extracted.value,
+    answers: extractedAnswers,
     transcript,
     includeIcebreaker: !suppressOutreach,
     maxRetries: deps.maxRetries,
@@ -239,6 +248,21 @@ export async function scoreAttempt(deps: ScoringDeps, attemptId: string): Promis
     return { status: "failed", message: narrative.error.error.message };
   }
 
+  // A requested callback replaces the interval retry only when the policy
+  // accepts it, and only for a lead that is still callable — the terminal and
+  // opt-out branches inside `saveScoringResult` run first and win. Outreach the
+  // judge suppressed is never rescheduled either.
+  const verdict = resolveRequestedCallback({ requestedAt: requestedCallback?.at, endedAt: endedAt ?? new Date() });
+  const callbackNextCallAt =
+    verdict.use && endedAt && !suppressOutreach
+      ? scheduleRetry({
+          attemptNumber: loaded.attempt.attemptNumber,
+          endedAt,
+          tz: loaded.lead.timezone,
+          requestedAt: verdict.at,
+        })
+      : null;
+
   const saved = await saveScoringResult(deps.db, {
     attemptId,
     leadId: loaded.lead.id,
@@ -247,6 +271,8 @@ export async function scoreAttempt(deps: ScoringDeps, attemptId: string): Promis
     reason: narrative.value.reason,
     icebreaker: narrative.value.icebreaker,
     event: transitionEvent(loaded, scored.value.decision),
+    requestedCallback,
+    ...(callbackNextCallAt ? { callbackNextCallAt } : {}),
   });
 
   if (!saved.ok) {

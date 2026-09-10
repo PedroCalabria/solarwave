@@ -1,3 +1,27 @@
+## 0. What this change closed, and what it handed on
+
+This change is complete as SOFTWARE and unproven as TELEPHONY, and those are two
+different statements. Every line of the voice path is written, built and tested;
+no telephone has ever carried a conversation through it.
+
+Twenty-four tasks below are marked `DEFERRED to real-call-proof` rather than
+deleted, because each one carries the measurement that produced it and the
+measurements are the point. They moved for one reason: not one of them is code
+that is missing. Twelve need a CONNECTED call, five need a Gemini realtime
+allowance this account exhausted, three need a Twilio number and a verified
+caller ID, two are spending decisions, one is a marker, and one — the debug
+event log — is instrumentation that belongs next to the call it will explain.
+Holding this change open until an external account cooperates would keep eight
+finished capability specs out of the baseline, and change 5 would then have to
+plan a scheduler against capabilities the repository refuses to admit exist.
+
+So the split is: `voice-bridge` archives the software. `real-call-proof` owns the
+field proof and runs LAST, after `lifecycle-and-operations`, exactly as the
+project owner deferred it on 2026-09-05.
+
+Nothing here is a claim that the deferred work is optional. `real-call-proof`
+holds the only evidence that the product does what it is named for.
+
 ## 1. Spikes — settle the three external unknowns before anything is built
 
 Sections 1 to 3 answer questions whose answers change the shape of the change.
@@ -124,9 +148,22 @@ So the remaining blocker is narrower than the balance suggested: free minutes
 do not dial on their own. The account still needs a phone number to call FROM
 and a verified caller ID to call TO, both from the console.
 
-- [ ] 3.2 Verify the demo destination number and place one manual test call from the console. Confirm the trial announcement's presence and length, and record how much of the two-minute budget it costs
-- [ ] 3.3 DECISION, and the one that may need the project owner: if a real call to the demo number is not possible on the trial, choose between upgrading to a paid number and demonstrating on the browser harness. Record the choice and the remaining call budget in the decision log
-- [ ] 3.4 Add the Twilio and voice environment variables to `apps/web/.env.example`, `.env.local` and the Vercel project (design migration plan); add `voice` to `MODEL_ROLES` so `assertConfiguredModels()` covers `AGENT_MODEL_VOICE`, and extend the env unit tests including the `google/`-prefix guard
+- DEFERRED to `real-call-proof` — 3.2 Verify the demo destination number and place one manual test call from the console. Confirm the trial announcement's presence and length, and record how much of the two-minute budget it costs
+- DEFERRED to `real-call-proof` — 3.3 DECISION, and the one that may need the project owner: if a real call to the demo number is not possible on the trial, choose between upgrading to a paid number and demonstrating on the browser harness. Record the choice and the remaining call budget in the decision log
+- [x] 3.4 Add the Twilio and voice environment variables to `apps/web/.env.example`, `.env.local` and the Vercel project (design migration plan); add `voice` to `MODEL_ROLES` so `assertConfiguredModels()` covers `AGENT_MODEL_VOICE`, and extend the env unit tests including the `google/`-prefix guard
+
+VERIFIED 2026-09-06 in the tree, which is why this is checked without a new
+commit: `voice` is the seventh entry in `MODEL_ROLES` and maps to
+`AGENT_MODEL_VOICE` (`packages/ai/src/env.ts`), the `google/`-prefix guard
+rejects a Gateway slug with a message naming the plain id, and
+`catalogue.test.ts` asserts one distinct variable per role and one check per
+role. `apps/web/.env.example` documents `TWILIO_ACCOUNT_SID`,
+`TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_FROM_NUMBER`,
+`TWILIO_TRIAL_ACCOUNT`, `TWILIO_AUTH_TOKEN`, `VOICE_PUBLIC_BASE_URL`,
+`VOICE_WRAP_UP_SECONDS`, `VOICE_MAX_CALL_SECONDS` and `AGENT_MODEL_VOICE`.
+Only the "and the Vercel project" half is unverifiable from the repository; it
+is re-listed as a precondition in `real-call-proof`, where a deployed webhook
+is what needs it.
 
 ## 4. Shared call policy out of `loop.ts`
 
@@ -192,7 +229,7 @@ produced (design D8).
   the page and fail if any writer appears, if the db import grows past
   `getDb` and `listActiveCriteria`, or if either admin guard is removed.
 
-- [ ] 7.4 Run a full conversation through the harness against the real Live model, in both `pt` and `en`, and record what it cost in quota. This is the first end-to-end proof of the voice half, and it costs no telephony — NEEDS A HUMAN AND A MICROPHONE. Run
+- DEFERRED to `real-call-proof` — 7.4 Run a full conversation through the harness against the real Live model, in both `pt` and `en`, and record what it cost in quota. This is the first end-to-end proof of the voice half, and it costs no telephony — NEEDS A HUMAN AND A MICROPHONE. Run
   `pnpm dev:voice`, open `/portal/harness` as an admin, and hold a call in each
   language. This is also where input-audio transcription gets verified for the
   first time: task 1.2 sent text, so the lead half of the transcript has never
@@ -242,22 +279,22 @@ Still unexplained, in order of suspicion:
    effectively ruled out for the eval, which uses no audio and no wrap-up, yet
    fails the same way — though either could still contribute in the harness.
 
-- [ ] 7b.0 FIRST, and it costs one session: after the allowance resets, run the
+- DEFERRED to `real-call-proof` — 7b.0 FIRST, and it costs one session: after the allowance resets, run the
   spike script alone. If it produces audio again, the day's degradation was
   quota and every other measurement taken late in the day is void
-- [ ] 7b.1 Establish whether the intermittency survives headphones, in a quiet
+- DEFERRED to `real-call-proof` — 7b.1 Establish whether the intermittency survives headphones, in a quiet
   room, with the 40 ms frames. Only meaningful on a fresh allowance, and only
   after 7b.0 says there is one
-- [ ] 7b.5 Price a paid realtime tier and decide. If a free allowance cannot
+- DEFERRED to `real-call-proof` — 7b.5 Price a paid realtime tier and decide. If a free allowance cannot
   sustain forty sessions of DEBUGGING, it cannot sustain a demo — and this now
   sits on the critical path in front of task 13
-- [ ] 7b.2 Log every provider event with a timestamp behind a debug flag, so the
+- DEFERRED to `real-call-proof` — 7b.2 Log every provider event with a timestamp behind a debug flag, so the
   order of `interrupted`, `turn_complete` and `audio` around a stall is visible
   rather than inferred
-- [ ] 7b.3 Run the session with the wrap-up disabled (`VOICE_WRAP_UP_SECONDS`
+- DEFERRED to `real-call-proof` — 7b.3 Run the session with the wrap-up disabled (`VOICE_WRAP_UP_SECONDS`
   beyond the hard stop) and see whether a call survives past 121 s. If it does,
   suspicion 2 is confirmed and the injection needs a different trigger
-- [ ] 7b.4 BLOCKS task 13.2. A real call inherits every one of these, and the
+- DEFERRED to `real-call-proof` — 7b.4 BLOCKS task 13.2. A real call inherits every one of these, and the
   Twilio allowance is 75 minutes
 
 ## 8. Attempt persistence for a real call
@@ -341,7 +378,7 @@ Two bugs of my own, found by this and fixed:
 - The pacing default was four seconds, which the data says is what broke the
   pass.
 
-- [ ] 12.5 Re-run the pass and record a usable measurement. THIRTEEN of thirteen
+- DEFERRED to `real-call-proof` — 12.5 Re-run the pass and record a usable measurement. THIRTEEN of thirteen
   probes have still never been graded against the voice model, and the pass
   cannot produce one until the realtime allowance resets
 
@@ -382,35 +419,35 @@ stale "in flight" message from the form, but the database was already right.
 
 **NOT proven, and only a connected call can prove it:**
 
-- [ ] 13pre.1 `/api/twilio/voice` returns TwiML that Twilio ACCEPTS. Ours is
+- DEFERRED to `real-call-proof` — 13pre.1 `/api/twilio/voice` returns TwiML that Twilio ACCEPTS. Ours is
   well-formed and unit-tested, but Twilio has never fetched it
-- [ ] 13pre.2 Twilio actually upgrades `/api/media`. Our own probe did; a
+- DEFERRED to `real-call-proof` — 13pre.2 Twilio actually upgrades `/api/media`. Our own probe did; a
   `<Connect><Stream>` from Twilio is a different client
-- [ ] 13pre.3 The audio conversion works on a real 8 kHz mu-law stream in both
+- DEFERRED to `real-call-proof` — 13pre.3 The audio conversion works on a real 8 kHz mu-law stream in both
   directions — the tests use synthetic tones, and a pitch or framing error is
   inaudible to them and obvious on a phone
-- [ ] 13pre.4 The conversation holds over the telephone: the agent speaks first
+- DEFERRED to `real-call-proof` — 13pre.4 The conversation holds over the telephone: the agent speaks first
   with the AI disclosure, hears the lead, and records answers
-- [ ] 13pre.5 Barge-in reaches Twilio: the `clear` frame actually stops audio
+- DEFERRED to `real-call-proof` — 13pre.5 Barge-in reaches Twilio: the `clear` frame actually stops audio
   the provider had buffered
-- [ ] 13pre.6 The mid-call transcript write happens, so a bridge that dies
+- DEFERRED to `real-call-proof` — 13pre.6 The mid-call transcript write happens, so a bridge that dies
   leaves the conversation behind
-- [ ] 13pre.7 `recordSessionResult` hands the session outcome to the status
+- DEFERRED to `real-call-proof` — 13pre.7 `recordSessionResult` hands the session outcome to the status
   callback, and the callback prefers it over the line status
-- [ ] 13pre.8 Scoring runs from a real attempt and the criteria score lands in
+- DEFERRED to `real-call-proof` — 13pre.8 Scoring runs from a real attempt and the criteria score lands in
   the portal. NOTE: the extraction half is ALREADY proven by the simulated call
   — 100/100 with verbatim evidence on both criteria — so what a real call adds
   here is only that a phone transcript feeds it
-- [ ] 13pre.9 The trial announcement's length, and how much of the two-minute
+- DEFERRED to `real-call-proof` — 13pre.9 The trial announcement's length, and how much of the two-minute
   budget it eats
 
 **Before the next attempt, and none of it is code:**
 
-- [ ] 13pre.10 Confirm the destination is a verified caller ID. The API reports
+- DEFERRED to `real-call-proof` — 13pre.10 Confirm the destination is a verified caller ID. The API reports
   ZERO verified caller ids on the account, even though the console's own trial
   panel lists the number. If the verification call itself does not arrive, the
   Brazilian carrier is filtering the US number and no amount of code will fix it
-- [ ] 13pre.11 If the carrier is filtering: a US number cannot carry this demo.
+- DEFERRED to `real-call-proof` — 13pre.11 If the carrier is filtering: a US number cannot carry this demo.
   The choices are a Brazilian Twilio number (regulatory bundle, review time) or
   demonstrating on the harness
 
@@ -422,7 +459,7 @@ Clean build passes with every voice route present: `/api/harness`, `/api/media`,
 `/api/twilio/voice`, `/api/twilio/status`, `/api/internal/call`. `packages/voice`
 keeps `dispatch.ts` behind a subpath, so nothing reaches the postgres driver
 from a Client Component.
-- [ ] 13.2 Place one real call to the verified demo number and confirm the whole chain: dispatch, TwiML, media stream, conversation, status callback, outcome, transcript, extraction, score, narrative, judge, portal
-- [ ] 13.3 Place a deliberate opt-out call and confirm the lead reaches terminal `opt_out`, that the attempt outcome is `opt_out`, and that a re-submission of the intake form does not reschedule that phone
-- [ ] 13.4 Kill the bridge mid-call on purpose and confirm the status callback still closes the attempt, the transcript survives, and the lead is retryable rather than stuck in `calling`
+- DEFERRED to `real-call-proof` — 13.2 Place one real call to the verified demo number and confirm the whole chain: dispatch, TwiML, media stream, conversation, status callback, outcome, transcript, extraction, score, narrative, judge, portal
+- DEFERRED to `real-call-proof` — 13.3 Place a deliberate opt-out call and confirm the lead reaches terminal `opt_out`, that the attempt outcome is `opt_out`, and that a re-submission of the intake form does not reschedule that phone
+- DEFERRED to `real-call-proof` — 13.4 Kill the bridge mid-call on purpose and confirm the status callback still closes the attempt, the transcript survives, and the lead is retryable rather than stuck in `calling`
 - [x] 13.5 Update `README.md` (state of the build, routes, scripts, the local voice development loop) and `openspec/config.yaml` (repository state, the settled open questions, the measured Live model id, sample rates, quotas and the real call budget remaining)
