@@ -50,6 +50,28 @@ export function LeadsDashboard({ rows, counts, kpis, threshold, statusFilter, qu
     return () => clearTimeout(handle);
   }, [search, query, statusFilter, router]);
 
+  /**
+   * A call in progress updates the dashboard without a reload
+   * (`lead-portal` spec, lifecycle-and-operations D10).
+   *
+   * Polling, and chosen by measurement rather than by preference. Supabase
+   * Realtime would need `leads` in the `supabase_realtime` publication, where
+   * Postgres Changes are authorised by row-level security — and spike 1.5 found
+   * RLS disabled on every table with zero policies, so publishing it would push
+   * names, emails and telephone numbers to anyone holding the public anon key.
+   *
+   * It also stops when there is nothing happening: no lead in `calling` means
+   * no timer, so a dashboard left open overnight does no work at all.
+   */
+  const callsInFlight = rows.some((row) => row.status === "calling");
+  useEffect(() => {
+    if (!callsInFlight) return;
+    const handle = setInterval(() => {
+      startTransition(() => router.refresh());
+    }, 5000);
+    return () => clearInterval(handle);
+  }, [callsInFlight, router]);
+
   const qualifiedRate = kpis.total > 0 ? Math.round((100 * kpis.qualified) / kpis.total) : 0;
   const tiles = [
     { label: "New today", value: String(kpis.newToday), delta: `${kpis.total} total` },

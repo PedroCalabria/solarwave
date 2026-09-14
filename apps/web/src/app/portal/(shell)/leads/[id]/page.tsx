@@ -3,6 +3,7 @@ import { isTerminal, isWithinCallWindow } from "@solarwave/core";
 import { reportStaleness } from "@solarwave/scoring";
 import { hasVoiceConfig } from "@solarwave/voice";
 import { requireEmployee } from "@/lib/auth";
+import { isDevMode } from "@/lib/devMode";
 import { CallNow } from "@/components/app/CallNow";
 import { SimulateCall } from "@/components/app/SimulateCall";
 import { StalenessBanner } from "@/components/app/StalenessBanner";
@@ -79,6 +80,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Admin-only. The action refuses these two cases itself; disabling the
   // control here just says so before the click rather than after it.
   const canSimulate = employee.role === "admin";
+  // The simulated call is an instrument for building this, not a feature of the
+  // product, so it stays off the page unless DEV_MODE says otherwise.
+  // `simulateCallAction` refuses on the same flag — hiding a control does not
+  // disable the server action behind it.
+  const devMode = isDevMode();
   const voiceConfigured = hasVoiceConfig();
   const simulateBlocked =
     lead.status === "opt_out"
@@ -145,7 +151,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <div className={detail.grid}>
         <div className={detail.column}>
-          {canSimulate ? (
+          {canSimulate && devMode ? (
             <SimulateCall leadId={lead.id} disabled={simulateBlocked !== null} note={simulateBlocked ?? undefined} />
           ) : null}
 
@@ -396,6 +402,50 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                       ) : a.endedReason ? (
                         <div style={{ fontSize: "var(--body-3)", lineHeight: 1.55, color: "var(--text-muted)", marginTop: 5, textWrap: "pretty" }}>
                           {a.endedReason}
+                        </div>
+                      ) : null}
+
+                      {/* What the call consumed (lifecycle-and-operations D5).
+                          Nothing is shown for an attempt that recorded nothing:
+                          a zero presented as a measurement says the call
+                          happened and cost nothing, which is worse than silence.
+                          The realtime figure is labelled `observed` because it
+                          is what our bridge saw, not what the provider metered. */}
+                      {a.telephonySeconds !== null || a.realtimeSeconds !== null ? (
+                        <div
+                          className={styles.mono}
+                          style={{
+                            marginTop: 5,
+                            display: "flex",
+                            gap: 10,
+                            flexWrap: "wrap",
+                            color: "var(--text-muted)",
+                            letterSpacing: ".06em",
+                          }}
+                        >
+                          {a.telephonySeconds !== null ? <span>telephony {a.telephonySeconds}s</span> : null}
+                          {a.realtimeSeconds !== null ? <span>realtime {a.realtimeSeconds}s observed</span> : null}
+                        </div>
+                      ) : null}
+
+                      {/* What the lead asked for, and what was done with it
+                          (D6). The verbatim phrase is shown even when nothing
+                          usable resolved, so a person can always see the
+                          request beside the decision. */}
+                      {a.requestedCallbackRaw ? (
+                        <div
+                          style={{
+                            marginTop: 5,
+                            fontSize: "var(--body-3)",
+                            lineHeight: 1.55,
+                            color: "var(--text-muted)",
+                            textWrap: "pretty",
+                          }}
+                        >
+                          Asked to be called back: &ldquo;{a.requestedCallbackRaw}&rdquo; —{" "}
+                          {a.requestedCallbackAt
+                            ? `next call set to ${formatDateTime(a.requestedCallbackAt)}`
+                            : "no usable time, so the standard retry applied"}
                         </div>
                       ) : null}
                     </div>

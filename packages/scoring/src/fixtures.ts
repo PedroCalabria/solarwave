@@ -81,3 +81,68 @@ function normalise(value: unknown): string {
   if (typeof value === "string") return value.trim().toLowerCase();
   return String(value);
 }
+
+/**
+ * Golden cases for the requested callback (lifecycle-and-operations D6).
+ *
+ * Kept separate from `GOLDEN_CASES` on purpose: those carry hand-verified
+ * expected answers for the SCORING criteria, and folding a new expectation into
+ * them would change what they assert. These exercise one field, and like the
+ * rest of the golden set they are shared by the mocked test and the real-model
+ * eval so the two cannot drift.
+ *
+ * `expectedLocal` is a local wall clock in `timezone`, which is what the model
+ * is asked for; null means the phrase is deliberately unresolvable and the
+ * interval policy must stand.
+ */
+export type CallbackCase = {
+  name: string;
+  timezone: string;
+  /** When the call ended, as a local wall clock, so "tomorrow" has a meaning. */
+  endedAtLocal: string;
+  transcript: TranscriptTurn[];
+  expectedLocal: string | null;
+  /** A phrase the verbatim `said` field should contain. */
+  saidContains: string;
+};
+
+export const CALLBACK_CASES: CallbackCase[] = [
+  {
+    name: "asks for tomorrow morning",
+    timezone: "America/Sao_Paulo",
+    endedAtLocal: "2026-09-06T14:30",
+    transcript: [
+      { who: "ai", text: "Posso te fazer duas perguntas rápidas sobre a sua conta de luz?" },
+      { who: "lead", text: "Agora não dá, estou dirigindo. Me liga amanhã de manhã, umas nove horas." },
+      { who: "ai", text: "Combinado, eu retorno. Obrigada pelo seu tempo." },
+    ],
+    expectedLocal: "2026-09-07T09:00",
+    saidContains: "amanhã",
+  },
+  {
+    name: "too vague to place on a clock",
+    timezone: "America/Sao_Paulo",
+    endedAtLocal: "2026-09-06T14:30",
+    transcript: [
+      { who: "ai", text: "Posso te fazer duas perguntas rápidas sobre a sua conta de luz?" },
+      { who: "lead", text: "Ah, me liga qualquer hora dessas, quando der." },
+      { who: "ai", text: "Sem problema, eu retorno. Obrigada." },
+    ],
+    // The lead did ask to be called back, and gave nothing a clock can hold.
+    // Guessing here is the failure; the 15-minute / 2-day policy must stand.
+    expectedLocal: null,
+    saidContains: "qualquer hora",
+  },
+  {
+    name: "no callback asked for at all",
+    timezone: "America/Sao_Paulo",
+    endedAtLocal: "2026-09-06T14:30",
+    transcript: [
+      { who: "ai", text: "O imóvel é seu ou alugado?" },
+      { who: "lead", text: "É meu, moro aqui há nove anos." },
+      { who: "ai", text: "Obrigada. Um especialista entra em contato." },
+    ],
+    expectedLocal: null,
+    saidContains: "",
+  },
+];

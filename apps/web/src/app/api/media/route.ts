@@ -78,6 +78,10 @@ async function bridge(ws: WebSocket) {
     const { attempt, lead, criteria } = resolved;
     attemptId = attempt.id;
 
+    // Measured from just before the provider connection is opened, so what is
+    // recorded is what the bridge actually held (lifecycle-and-operations D5).
+    const sessionStartedAt = Date.now();
+
     session = await startVoiceSession({
       transport: geminiTransport(requireApiKey()),
       model: requireModelId("voice"),
@@ -109,6 +113,7 @@ async function bridge(ws: WebSocket) {
                 outcome: event.result.outcome,
                 endedReason: event.result.endedReason,
                 transcript: event.result.transcript,
+                realtimeSeconds: Math.round((Date.now() - sessionStartedAt) / 1000),
               });
               ws.close();
             })();

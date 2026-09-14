@@ -7,6 +7,7 @@ import { getDb, getLeadById } from "@solarwave/db";
 import { scoreAttempt } from "@solarwave/scoring";
 import { revalidatePath } from "next/cache";
 import { ForbiddenError, requireAdmin } from "@/lib/auth";
+import { isDevMode } from "@/lib/devMode";
 import { scoringDeps } from "@/lib/scoring";
 
 export type SimulateActionState = { ok: boolean; message: string; nonce: number };
@@ -38,6 +39,13 @@ export async function simulateCallAction(
     await requireAdmin();
   } catch (e) {
     return next(false, e instanceof ForbiddenError ? e.message : "Not allowed");
+  }
+
+  // The lead detail hides the control when DEV_MODE is off, but a server action
+  // stays callable by anyone who can reach the route. This is the lock; the
+  // hidden control is only the courtesy.
+  if (!isDevMode()) {
+    return next(false, "Simulated calls are a development control and are switched off (DEV_MODE).");
   }
 
   const leadId = String(formData.get("leadId") ?? "");

@@ -8,8 +8,16 @@
  *   pnpm eval
  */
 import { assertConfiguredModels, modelFor, requireModelId, type LanguageModel } from "@solarwave/ai";
-import { extractAnswers } from "../extract";
-import { GOLDEN_CASES, GOLDEN_CRITERIA, gradeExtraction, type CriterionScore } from "../fixtures";
+import { localToInstant, resolveRequestedCallback } from "@solarwave/core";
+import { extractAnswers, extractCall } from "../extract";
+import {
+  CALLBACK_CASES,
+  GOLDEN_CASES,
+  GOLDEN_CRITERIA,
+  gradeExtraction,
+  type CallbackCase,
+  type CriterionScore,
+} from "../fixtures";
 import { judgeTranscript } from "../judge";
 import { isVerbatim } from "../transcript";
 
@@ -130,6 +138,61 @@ async function evalJudge(model: LanguageModel) {
   console.log(`\n  Caught ${caught}/${JUDGE_CASES.length}. False positives on a clean call: ${falsePositives}`);
 }
 
+/**
+ * The requested callback, against the real model
+ * (lifecycle-and-operations task 5.6).
+ *
+ * Graded on the thing that actually matters: not "did it produce a timestamp"
+ * but "did it produce the RIGHT one, and did it decline to guess when the lead
+ * was vague". A model that resolves every phrase to something is worse than one
+ * that resolves none, because the vague ones then silently reschedule calls.
+ */
+async function evalCallback(model: LanguageModel) {
+  console.log(`\nRequested callback — ${CALLBACK_CASES.length} golden transcripts\n`);
+  let correct = 0;
+
+  let first = true;
+  for (const golden of CALLBACK_CASES) {
+    if (!first) await pace();
+    first = false;
+
+    const endedAt = localToInstant(parseLocal(golden.endedAtLocal), golden.timezone);
+    const result = await extractCall({
+      criteria: GOLDEN_CRITERIA,
+      transcript: golden.transcript,
+      callback: { timezone: golden.timezone, endedAt },
+      model,
+    });
+    if (!result.ok) {
+      console.log(`  ${golden.name.padEnd(34)} FAILED — ${JSON.stringify(result.error)}`);
+      continue;
+    }
+
+    const got = result.value.callback?.at ?? null;
+    const want = golden.expectedLocal ? localToInstant(parseLocal(golden.expectedLocal), golden.timezone) : null;
+    const matched = got?.getTime() === want?.getTime() || (got === null && want === null);
+    if (matched) correct += 1;
+
+    // Whether the policy would ACT on it, which is the decision the lead feels.
+    const verdict = resolveRequestedCallback({ requestedAt: got, endedAt });
+    console.log(
+      `  ${golden.name.padEnd(34)} ${matched ? "ok    " : "WRONG "}` +
+        ` got=${got ? got.toISOString() : "null"} want=${want ? want.toISOString() : "null"}` +
+        ` policy=${verdict.use ? "reschedule" : verdict.reason}` +
+        ` said=${JSON.stringify((result.value.callback?.said ?? "").slice(0, 40))}`,
+    );
+  }
+
+  console.log(`\n  Resolved ${correct}/${CALLBACK_CASES.length} correctly.`);
+}
+
+function parseLocal(value: CallbackCase["endedAtLocal"]) {
+  const [date, time] = value.split("T") as [string, string];
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  const [hour, minute] = time.split(":").map(Number) as [number, number];
+  return { year, month, day, hour, minute };
+}
+
 async function main() {
   await assertConfiguredModels();
 
@@ -144,6 +207,8 @@ judge:      ${judgeId}
 pacing:     ${DELAY_MS}ms between calls`);
 
   await evalExtraction(extractionModel);
+  await pace();
+  await evalCallback(extractionModel);
   await evalJudge(judgeModel);
 }
 

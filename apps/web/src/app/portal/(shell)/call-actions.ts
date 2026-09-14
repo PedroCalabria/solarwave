@@ -1,9 +1,11 @@
 "use server";
 
+import { isTerminal } from "@solarwave/core";
 import { getDb, getLeadById } from "@solarwave/db";
 import { dispatchCall } from "@solarwave/voice/dispatch";
 import { revalidatePath } from "next/cache";
 import { ForbiddenError, requireAdmin } from "@/lib/auth";
+import { startLeadRun } from "@/lib/leadRun";
 
 export type CallActionState = { ok: boolean; message: string; nonce: number };
 
@@ -23,6 +25,10 @@ const REFUSALS: Record<string, string> = {
   outside_call_window: "It is outside the 08:00–22:00 window in this lead's timezone.",
   no_active_criteria: "No criterion is active, so there is nothing to ask. Activate one first.",
   not_configured: "Telephony is not configured, so no call can be placed.",
+  auto_dispatch_disabled:
+    "Automatic dispatch is switched off, so the scheduler placed no call. Turn it on under Operations.",
+  budget_exhausted:
+    "The call budget is spent. Raise it under Operations, or wait for the window to roll.",
 };
 
 /**
@@ -56,7 +62,14 @@ export async function callNowAction(prev: CallActionState, formData: FormData): 
 
   switch (result.status) {
     case "refused": {
-      const detail = result.reason === "not_configured" && result.detail ? ` Missing: ${result.detail}.` : "";
+      const detail =
+        result.reason === "not_configured" && result.detail
+          ? ` Missing: ${result.detail}.`
+          : // Which budget, and how far past it. "Budget exhausted" on its own
+            // sends an operator to the database to find out.
+            result.reason === "budget_exhausted" && result.detail
+            ? ` (${result.detail})`
+            : "";
       return next(false, (REFUSALS[result.reason] ?? "Could not place this call.") + detail);
     }
     case "failed":
@@ -70,5 +83,43 @@ export async function callNowAction(prev: CallActionState, formData: FormData): 
         true,
         `Calling ${lead.phone} now — attempt ${result.attemptNumber}. The result lands here when the call ends.`,
       );
+  }
+}
+
+/**
+ * Starts the durable run for a lead that has none
+ * (lifecycle-and-operations D9, `call-orchestration` spec).
+ *
+ * Intake starts a run for every lead it creates, so this exists for the ones
+ * that predate the scheduler and for a run that was cancelled. It places no
+ * call itself: the run re-reads the lead and obeys every refusal, the
+ * automatic-dispatch switch included.
+ */
+export async function startRunAction(prev: CallActionState, formData: FormData): Promise<CallActionState> {
+  const next = (ok: boolean, message: string) => ({ ok, message, nonce: prev.nonce + 1 });
+
+  try {
+    await requireAdmin();
+  } catch (e) {
+    return next(false, e instanceof ForbiddenError ? e.message : "Not allowed");
+  }
+
+  const leadId = String(formData.get("leadId") ?? "");
+  if (!leadId) return next(false, "Missing lead");
+
+  const db = getDb();
+  const lead = await getLeadById(db, leadId);
+  if (!lead) return next(false, REFUSALS.lead_not_found!);
+  // Spec section 6: never schedule anything for an opted-out lead, not even a
+  // run that would refuse to dial. The refusal is clearer here than downstream.
+  if (lead.status === "opt_out") return next(false, REFUSALS.opted_out!);
+  if (isTerminal(lead.status)) return next(false, "This lead has reached a final status. There is nothing to schedule.");
+
+  try {
+    const runId = await startLeadRun(leadId);
+    revalidatePath(`/portal/leads/${leadId}`);
+    return next(true, `Scheduling run started (${runId}). It calls at the lead's next scheduled time.`);
+  } catch (error) {
+    return next(false, `Could not start the run: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

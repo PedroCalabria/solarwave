@@ -12,6 +12,9 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
+    // Orchestration tests need the workflow plugin to compile the
+    // directives; they run from vitest.workflow.config.mts instead.
+    exclude: ["src/**/*.workflow.test.ts", "**/node_modules/**"],
     environment: "node",
     testTimeout: 30_000,
     hookTimeout: 60_000,

@@ -11,7 +11,14 @@ export {
   CALL_WINDOW_END_HOUR,
   type LocalParts,
 } from "./window";
-export { scheduleRetry, MAX_ATTEMPTS, type RetryInput } from "./retry";
+export {
+  scheduleRetry,
+  resolveRequestedCallback,
+  MAX_ATTEMPTS,
+  REQUESTED_CALLBACK_HORIZON_DAYS,
+  type RetryInput,
+  type CallbackVerdict,
+} from "./retry";
 export {
   transition,
   isTerminal,
@@ -46,3 +53,14 @@ export {
   type ScoreInput,
   type ScoreResult,
 } from "./scoring";
+export {
+  budgetAllows,
+  dailyWindowStart,
+  monthlyWindowStart,
+  DEFAULT_OPERATIONS_SETTINGS,
+  DAILY_BUDGET_WINDOW_MS,
+  MONTHLY_BUDGET_WINDOW_MS,
+  type OperationsSettings,
+  type BudgetConsumption,
+  type BudgetVerdict,
+} from "./operations";

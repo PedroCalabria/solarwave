@@ -26,6 +26,8 @@ export type ExtractionSchema = {
   schema: z.ZodType;
   /** Active criterion keys, in schema order. */
   keys: string[];
+  /** Whether the reserved callback field was actually added. */
+  hasCallback: boolean;
 };
 
 /**
@@ -66,7 +68,10 @@ function valueSchema(criterion: ExtractionCriterion): z.ZodType {
  * Returns validation errors instead of a schema when any active criterion is
  * misconfigured, so a bad rule fails before a model is ever called.
  */
-export function buildExtractionSchema(criteria: ExtractionCriterion[]): Result<ExtractionSchema, RuleError[]> {
+export function buildExtractionSchema(
+  criteria: ExtractionCriterion[],
+  withCallback = false,
+): Result<ExtractionSchema, RuleError[]> {
   const active = criteria.filter((c) => c.active);
   const errors: RuleError[] = [];
 
@@ -92,8 +97,59 @@ export function buildExtractionSchema(criteria: ExtractionCriterion[]): Result<E
       .describe(criterion.label);
   }
 
-  return ok({ schema: z.object(shape), keys: active.map((c) => c.key) });
+  // Guarded rather than assumed: if a criterion has taken the reserved key, the
+  // criterion wins and the callback is simply not asked for. A real criterion
+  // going missing would be the worse failure.
+  const includeCallback = !active.some((c) => c.key === CALLBACK_KEY);
+  if (withCallback && includeCallback) shape[CALLBACK_KEY] = callbackField;
+
+  return ok({ schema: z.object(shape), keys: active.map((c) => c.key), hasCallback: withCallback && includeCallback });
 }
+
+/**
+ * The reserved schema key the requested callback is read under
+ * (lifecycle-and-operations D6).
+ *
+ * Underscore-prefixed because criterion keys are slugs derived from labels and
+ * never start with one, so it cannot collide with a real criterion. The
+ * collision is guarded anyway: `buildExtractionSchema` refuses to add the field
+ * when a criterion has somehow taken the key, and extraction simply reports no
+ * callback rather than failing an otherwise good pass.
+ */
+export const CALLBACK_KEY = "_requested_callback";
+
+/**
+ * The model is asked for a LOCAL WALL CLOCK, not an instant.
+ *
+ * Asking a language model for a timezone-correct ISO instant invites it to do
+ * offset arithmetic, which is exactly the arithmetic `localToInstant` already
+ * does correctly and deterministically, DST included. So the model resolves
+ * "tomorrow morning" to `2026-09-07T09:00` in the lead's own timezone and the
+ * conversion stays in code.
+ */
+export const callbackField = z
+  .unknown()
+  .optional()
+  .describe(
+    "A time the lead asked to be called back at, as an object " +
+      '{ "said": string, "local_datetime": string | null }. `said` is their own words, verbatim, empty when ' +
+      "they did not ask. `local_datetime` is YYYY-MM-DDTHH:mm in the lead's LOCAL timezone, or null when they " +
+      "did not ask or were too vague to place on a clock.",
+  );
+
+/**
+ * Deliberately unstructured at the schema level, for the same reason
+ * `confidence` is unbounded: this field must not be able to fail an otherwise
+ * good extraction.
+ *
+ * MEASURED while building it — declared as a required object, a model that
+ * simply omitted the key failed structured-output validation and took every
+ * criteria answer down with it. Change 3 measured this model omitting fields it
+ * was asked for and change 4 measured it omitting required tool arguments, so
+ * that is the normal case, not the exotic one. The shape lives in the
+ * description and in the prompt; `readCallback` is what enforces it, and it
+ * degrades to "no callback" on anything it does not recognise.
+ */
 
 /** The vocabulary the model may answer an enum criterion with, for prompt text. */
 export function vocabularyFor(criterion: ExtractionCriterion): string[] {

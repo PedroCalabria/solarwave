@@ -111,6 +111,22 @@ export const callAttempts = pgTable(
     transcript: jsonb("transcript").$type<TranscriptTurn[]>(),
     /** created_at + 12 months (spec section 10). */
     transcriptExpiresAt: timestamp("transcript_expires_at", { withTimezone: true }),
+    /**
+     * What the lead said when they asked to be called back, verbatim, and what
+     * it resolved to. Kept as a pair on purpose (lifecycle-and-operations D6):
+     * the phrase is stored even when nothing usable resolves, so a person can
+     * always see what was asked for and what the machine did with it.
+     */
+    requestedCallbackRaw: text("requested_callback_raw"),
+    requestedCallbackAt: timestamp("requested_callback_at", { withTimezone: true }),
+    /**
+     * What this attempt consumed, in the two currencies that actually run out
+     * (design D5). Not money: this project spends none, so a currency column
+     * would always read zero and would brake nothing. `realtimeSeconds` is what
+     * the bridge OBSERVED, not what the provider metered.
+     */
+    telephonySeconds: integer("telephony_seconds"),
+    realtimeSeconds: integer("realtime_seconds"),
     ...timestamps,
   },
   (t) => [
@@ -210,7 +226,18 @@ export const settings = pgTable("settings", {
 export const SETTING_KEYS = {
   handoffThreshold: "handoff_threshold",
   minAnsweredWeightShare: "min_answered_weight_share",
+  /**
+   * The operational envelope (lifecycle-and-operations D4). These live here,
+   * beside the scoring settings, so they inherit the audit row and the
+   * admin-only mutation rule rather than growing a second settings mechanism.
+   */
+  autoDispatchEnabled: "auto_dispatch_enabled",
+  dailyCallBudget: "daily_call_budget",
+  monthlyVoiceSecondsBudget: "monthly_voice_seconds_budget",
 } as const;
+
+/** Keys whose value is a switch rather than a number. */
+export const BOOLEAN_SETTING_KEYS: readonly string[] = [SETTING_KEYS.autoDispatchEnabled];
 
 /* --------------------------------------------------- guardrail_violations */
 

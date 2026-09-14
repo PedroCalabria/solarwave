@@ -10,7 +10,16 @@ export {
   verifiedEvidence,
   type TranscriptTurn,
 } from "./transcript";
-export { extractAnswers, type ExtractedAnswer, type ExtractInput, type ExtractionError } from "./extract";
+export {
+  extractAnswers,
+  extractCall,
+  type ExtractedAnswer,
+  type ExtractInput,
+  type ExtractionError,
+  type ExtractionOutput,
+  type RequestedCallback,
+  type CallbackContext,
+} from "./extract";
 export {
   generateNarrative,
   type Narrative,

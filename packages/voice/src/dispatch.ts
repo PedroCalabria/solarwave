@@ -4,10 +4,12 @@ import {
   createDispatchedAttempt,
   finishAttempt,
   getLeadById,
+  getOperationsSettings,
   listActiveCriteria,
   reconcileStaleAttempts,
   type CallAttempt,
   type Db,
+  type DispatchOrigin,
   type Lead,
 } from "@solarwave/db";
 import twilio from "twilio";
@@ -35,7 +37,11 @@ export type DispatchRefusal =
   | "blocked_by_violation"
   | "outside_call_window"
   | "no_active_criteria"
-  | "not_configured";
+  | "not_configured"
+  /** The scheduler asked while automatic dispatch is switched off. */
+  | "auto_dispatch_disabled"
+  /** A daily call or monthly voice-second budget is spent. */
+  | "budget_exhausted";
 
 export type DispatchResult =
   | { status: "dispatched"; attempt: CallAttempt; attemptNumber: number; lead: Lead; callSid: string }
@@ -56,6 +62,12 @@ export type PlaceCall = (input: {
 export type DispatchCallInput = {
   db: Db;
   leadId: string;
+  /**
+   * Who asked (lifecycle-and-operations D4). Defaults to `human`, so an
+   * existing caller keeps behaving exactly as it did: only a caller that
+   * declares itself the run is gated by `auto_dispatch_enabled`.
+   */
+  origin?: DispatchOrigin;
   config?: VoiceConfig;
   placeCall?: PlaceCall;
   now?: Date;
@@ -107,6 +119,7 @@ export function twilioPlaceCall(config: VoiceConfig): PlaceCall {
 export async function dispatchCall({
   db,
   leadId,
+  origin = "human",
   config: given,
   placeCall,
   now = new Date(),
@@ -124,6 +137,16 @@ export async function dispatchCall({
   // writes the attempt, which is what actually makes it safe under a race.
   if (lead.status === "opt_out") return { status: "refused", reason: "opted_out" };
 
+  // Checked here, before anything else costs a query, and checked AGAIN inside
+  // the reserving transaction where it is race-proof. A run whose switch is off
+  // must not load criteria or reconcile attempts every time it wakes — and the
+  // refusal it reports should name the switch, not whatever it tripped over
+  // first on the way there.
+  if (origin === "run") {
+    const operations = await getOperationsSettings(db);
+    if (!operations.autoDispatchEnabled) return { status: "refused", reason: "auto_dispatch_disabled" };
+  }
+
   const criteria = await listActiveCriteria(db);
   if (criteria.length === 0) return { status: "refused", reason: "no_active_criteria" };
 
@@ -137,8 +160,12 @@ export async function dispatchCall({
   // not need a cron to become callable again (design D6).
   await reconcileStaleAttempts(db, { maxCallSeconds: config.maxCallSeconds, now });
 
-  const created = await createDispatchedAttempt(db, { leadId, now });
-  if (!created.ok) return { status: "refused", reason: created.reason };
+  const created = await createDispatchedAttempt(db, { leadId, now, origin });
+  if (!created.ok) {
+    // The detail says WHICH budget, which the portal shows: "budget exhausted"
+    // with no number sends an operator to the database to find out.
+    return { status: "refused", reason: created.reason, ...(created.detail ? { detail: created.detail } : {}) };
+  }
 
   const place = placeCall ?? twilioPlaceCall(config);
   let callSid: string;
