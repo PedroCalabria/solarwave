@@ -25,9 +25,9 @@ packages/
 openspec/         Decision log (config.yaml) and change proposals, designs, specs and tasks
 ```
 
-Everything runs on Vercel: the scheduler will be a Vercel Workflow and the
-voice bridge a WebSocket route, per the decision log. No separate always-on
-service.
+Everything runs on Vercel: the scheduler is a Vercel Workflow, the voice bridge
+a WebSocket route and the periodic work one daily cron, per the decision log.
+No separate always-on service.
 
 ## Running it locally
 
@@ -86,10 +86,12 @@ The seed creates two Supabase Auth users (`lucas.prado@soltera.com` as admin,
 `SEED_EMPLOYEE_PASSWORD` (default `solarwave-demo-2026`). Without the Supabase
 variables the seed still runs against plain Postgres, but nobody can sign in.
 
-Supabase free-tier projects pause after a week without traffic. Until the daily
-maintenance job lands (`lifecycle-and-operations` — its own database access is
-what keeps the project awake, so there is no separate keep-alive job), restore a
-paused project from the Supabase dashboard (*Project → Restore*) before a demo.
+Supabase free-tier projects pause after a week without traffic. The daily
+maintenance cron (`apps/web/vercel.json`, 04:00 UTC) touches the database on
+every run, and that is the keep-alive — there is no separate job. It only runs
+on a deployment with `CRON_SECRET` set: without the secret the route refuses
+every call, the cron included. A project that paused anyway is restored from the
+Supabase dashboard (*Project → Restore*).
 
 ### The voice bridge locally
 
@@ -131,9 +133,12 @@ VOICE_PUBLIC_BASE_URL=https://solarwave-eta.vercel.app
 That domain is public. The generated deployment URLs and the preview aliases are
 behind Vercel Authentication and answer a 302 to SSO, which Twilio cannot
 satisfy, so **Twilio only ever talks to production**. The webhooks carry their
-own locks — a Twilio signature on each one, and a short-lived signed token bound
-to the call SID on the media socket — because on production those endpoints are
-publicly reachable and nothing else stands in front of them.
+own locks because on production those endpoints are publicly reachable and
+nothing else stands in front of them. Dispatch puts a signed token bound to the
+attempt in the webhook URLs, and the media socket takes a short-lived token bound
+to the call SID. Twilio signs its webhooks with the account auth token, which an
+API key cannot verify, so the provider signature is checked only when
+`TWILIO_AUTH_TOKEN` is set as well.
 
 ## Routes
 
@@ -145,15 +150,18 @@ publicly reachable and nothing else stands in front of them.
 | `/portal/leads?status=&q=` | Leads dashboard |
 | `/portal/leads/[id]` | Lead detail: score, criteria-driven answers, attempts, transcript |
 | `/portal/criteria` | Qualification criteria, call order preview and scoring settings (admin edits, agents read) |
+| `/portal/violations` | Guardrail findings from the judge, and their review |
 | `/portal/audit` | Criteria and settings audit history |
 | `/portal/harness` | Voice harness: the realtime agent on your microphone (admin only) |
 | `/portal/operations` | Automatic dispatch, the call budgets and what they have spent (admin edits, agents read) |
 | `POST /api/leads` | Intake API — also starts the lead's scheduling run |
 | `GET/POST /api/cron/maintenance` | Daily job behind `CRON_SECRET`: transcript purge, stale-attempt recovery, scoring recovery, overdue sweep |
 | `POST /api/internal/call` | Places a real call (shared secret) |
+| `POST /api/internal/score` | Scores one attempt by hand (`SCORING_WORKER_SECRET`) |
 | `POST /api/twilio/voice` | Call instructions: connects the media stream |
 | `POST /api/twilio/status` | Status callback: closes the attempt and hands it to scoring |
 | `GET /api/media` | Twilio Media Streams ↔ Gemini Live (WebSocket) |
+| `GET /api/harness` | Browser microphone ↔ Gemini Live for the voice harness (WebSocket, admin only) |
 
 ## Scripts
 
@@ -166,7 +174,7 @@ publicly reachable and nothing else stands in front of them.
 | `pnpm build` | Next.js production build — the only check that exercises the server/client module boundary |
 | `pnpm test` | Unit tests in every workspace (web and db integration tests run when `DATABASE_URL` is set) |
 | `pnpm --filter web test:integration` | Web integration tests through `.env.local`. NOTE: this TRUNCATES the database — run `pnpm db:seed` afterwards |
-| `pnpm --filter web test:workflow` | Workflow orchestration tests. Currently skipped: see "the scheduler" below |
+| `pnpm --filter web test:workflow` | Workflow orchestration tests. Currently skipped: see "State of the build" below |
 | `pnpm --filter @solarwave/db test:integration` | Database tests through `.env.local` |
 | `pnpm db:generate` | New Drizzle migration from `packages/db/src/schema.ts` |
 | `pnpm db:migrate` / `pnpm db:seed` | Apply migrations / load demo data (idempotent) |
@@ -301,6 +309,24 @@ ordering. It affects only the test runtime, not the product.
 
 Still not built: nothing in the pipeline. What remains is `real-call-proof`
 (change 6) — the twelve claims that only a connected telephone can settle.
+
+Known limits of what is built, as it stands:
+
+- **A trial Twilio account dials only verified caller IDs.** Under the no-cost
+  constraint below, automatic dispatch can reach a verified demo number and
+  nothing else, so "every lead gets a call" holds for the software, not for
+  this account.
+- **A re-score changes the number, not the verdict.** It reruns the engine over
+  the stored answers and the current criteria, and rewrites each answer's
+  pass/fail, but it keeps the lead's status, reason and icebreaker: a lead can
+  read `qualified` below the threshold, with a reason written for its old score.
+  Scores are not pinned to a criteria version either — the score as first
+  computed can be rebuilt only by hand, from the audit history.
+- **The lead's timezone is the area code's.** A DDD says where the number was
+  issued, not where the person is, and DDD 97 includes western Amazonas
+  municipalities on UTC-5 (Eirunepé) that are mapped to Manaus, UTC-4.
+- **The leads dashboard lists every lead, newest first.** The rep's shortlist is
+  the `qualified` filter; nothing is pushed to or assigned to a rep.
 
 A standing constraint on all of it: this demonstration incurs **no execution
 costs**. No paid Gemini realtime tier, no paid Twilio number, no Brazilian
