@@ -49,6 +49,22 @@ const HIDE = [
   "vite-plugin-checker-error-overlay",
 ];
 
+/**
+ * Panels that scroll inside themselves.
+ *
+ * A full-page capture does not scroll, so whatever sits below such a panel's
+ * own fold is simply absent from the PNG. The lead detail's transcript is
+ * capped at 660px above 1100px wide, and the longest seeded conversation was
+ * being cut mid-sentence — in the one shot whose whole point is the transcript.
+ *
+ * Released for the FULL capture only, after the viewport one is already
+ * written, so the first-fold image still shows the panel as the product
+ * actually behaves.
+ *
+ * Matched on a class substring because CSS modules hash the class name.
+ */
+const EXPAND = ['[class*="transcript"]'];
+
 /** Seeded ids are fixed (`packages/db/src/seed/data.ts`), so these links are stable. */
 const lead = (n) => `00000001-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
@@ -369,6 +385,11 @@ async function main() {
       await page.addStyleTag({ content: `${HIDE.join(",")} { display: none !important }` });
       await page.screenshot({ path: join(OUT, `${shot.slug}-viewport.png`) });
       if (!shot.viewportOnly) {
+        if (EXPAND.length > 0) {
+          await page.addStyleTag({
+            content: `${EXPAND.join(",")} { max-height: none !important; overflow: visible !important }`,
+          });
+        }
         await page.screenshot({ path: join(OUT, `${shot.slug}-full.png`), fullPage: true });
       }
       await page.close();
