@@ -219,7 +219,9 @@ Done in the `conversation-agent-text` change:
 - **Simulated calls**: an admin action on the lead detail runs the real agent
   against a simulated lead, writes a genuine attempt marked `simulated` and
   scores it. Closes conversation → transcript → extraction → score → narrative →
-  judge with no telephony.
+  judge with no telephony. It is a **development control**, behind `DEV_MODE`
+  and off by default: the card is hidden and the action refuses. Attempts it
+  already wrote keep their `simulated` label wherever they appear.
 
 Built in the `voice-bridge` change, and NOT yet proven on a telephone. That
 change archived as SOFTWARE and not as telephony: the code is complete and

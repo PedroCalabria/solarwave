@@ -3,6 +3,7 @@ import { isTerminal, isWithinCallWindow } from "@solarwave/core";
 import { reportStaleness } from "@solarwave/scoring";
 import { hasVoiceConfig } from "@solarwave/voice";
 import { requireEmployee } from "@/lib/auth";
+import { isDevMode } from "@/lib/devMode";
 import { CallNow } from "@/components/app/CallNow";
 import { SimulateCall } from "@/components/app/SimulateCall";
 import { StalenessBanner } from "@/components/app/StalenessBanner";
@@ -79,6 +80,11 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   // Admin-only. The action refuses these two cases itself; disabling the
   // control here just says so before the click rather than after it.
   const canSimulate = employee.role === "admin";
+  // The simulated call is an instrument for building this, not a feature of the
+  // product, so it stays off the page unless DEV_MODE says otherwise.
+  // `simulateCallAction` refuses on the same flag — hiding a control does not
+  // disable the server action behind it.
+  const devMode = isDevMode();
   const voiceConfigured = hasVoiceConfig();
   const simulateBlocked =
     lead.status === "opt_out"
@@ -145,7 +151,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <div className={detail.grid}>
         <div className={detail.column}>
-          {canSimulate ? (
+          {canSimulate && devMode ? (
             <SimulateCall leadId={lead.id} disabled={simulateBlocked !== null} note={simulateBlocked ?? undefined} />
           ) : null}
 
